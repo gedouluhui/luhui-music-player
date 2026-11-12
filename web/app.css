@@ -1,0 +1,1801 @@
+/* ============================================================
+   椒盐音乐 · Salt Player Pro — 界面样式
+   设计基调（Studio Noir）：石墨黑为底、骨白为字、黄铜只做细小记号；
+   封面是页面上唯一高饱和的东西，界面自身不发光、不染色、不抢戏。
+   ============================================================ */
+
+/* 尺度令牌。圆角/字号/时长各自收敛成一套档位，规则里只许引用、不许再写字面值
+   （tools/visual_audit.py --gate 数的就是「残留字面量种类数」，令牌定义本身不进这条账）。
+   材质四件：--lift 抬起件的上亮下平斜坡、--edge 1px 上沿补光、--raised 双层中性阴影、
+   --sheen-* 面板漫射。没有彩色光晕、没有大圆角糖果、没有把强调色铺满整块面板。 */
+:root {
+  color-scheme: dark;  /* 原生 select 弹层、滚动条按深色渲染 */
+  --r-xs: 6px;        /* 小片：徽标、tooltip、键帽 */
+  --r-sm: 10px;       /* 控件：行、输入框、图标按钮、导航项 */
+  --r-md: 14px;       /* 中件：缩略封面、卡片、toast、列表底板 */
+  --r-lg: 18px;       /* 面板件：hero 封面、设置块 */
+  --r-xl: 28px;       /* 浮层：对话框、播放页封面 */
+  --r-2xl: 30px;      /* 大块：欢迎卡、全屏封面、拖放提示 */
+  --r-pill: 99px;
+  --r-circle: 50%;
+  --radius: var(--r-lg);
+
+  --fs-micro: 10.5px;  /* 徽标字距、品牌副行 */
+  --fs-caption: 11.5px;/* 三级：列头、计数、行号 */
+  --fs-small: 12.5px;  /* 二级：副标题、说明、tab */
+  --fs-body-s: 13.5px; /* 行/导航/按钮 */
+  --fs-body: 14px;     /* 正文基准 */
+  --fs-lead: 15.5px;   /* 正在播放标题、品牌名 */
+  --fs-icon: 16px;     /* 图标按钮的字号基准（SVG 尺寸另由 .ic 控制） */
+  --fs-h4: 17.5px;     /* 区块标题、浮层提示 */
+  --fs-h3: 21px;       /* 视图标题、对话框标题 */
+  --fs-h2: 24px;       /* hero / 全屏标题下限 */
+  --fs-h1: 29px;       /* 装饰字形、全屏歌词上限 */
+  --fs-hero: 42px;     /* hero 标题上限 */
+  --fs-glyph: 42px;    /* 无封面占位图标 */
+  --fs-mark: 15px;     /* 播放三角/条形这类小字形 */
+
+  /* 全屏播放页字号：随视口宽度放大，大屏不再被 --fs-hero 封死成小字。
+     这是 token 定义（`--x:` 开头），visual_audit 只数真属性 `font-size:` 的字面量种类，
+     令牌里的 clamp/vw/px 不进那条账 —— 所以下面 .fs-* 规则里全是 var() 引用。 */
+  --fs-fs-title:   clamp(var(--fs-h1),  2.4vw, 60px);
+  --fs-fs-artist:  clamp(var(--fs-lead), 1.15vw, 26px);
+  --fs-fs-lyric:   clamp(var(--fs-h3),  1.72vw, 40px);
+  --fs-fs-lyric-on: clamp(var(--fs-h2), 2.25vw, 52px);
+
+  --t-fast: .14s;
+  --t: .18s;
+  --t-med: .25s;
+  --t-slow: .35s;
+  --t-x: .5s;
+  --t-fade: 1.4s;
+  --t-drift: 42s;
+
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+             system-ui, -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+             system-ui, -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif;
+
+  --salt: #e4d2ae;
+  --pepper: #1a1a1c;
+  --accent: #c9a86a;             /* 黄铜：只做选中线、计数、小图标 */
+  --accent-up: #dcc08a;
+  --accent-soft: rgba(201, 168, 106, .13);
+  --accent-line: rgba(201, 168, 106, .34);
+  --accent-ink: #d9c092;         /* 强调色「当文字」用（填充色 --accent 不许当文字） */
+  --on-accent: #17120a;          /* 画在强调色填充上的墨色 */
+  --on-dark: #fff;               /* 画在深墨填充上的白 */
+  /* select 的自绘箭头（伪元素挂不到原生 select 上，只能塞进背景图） */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a6a096' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+  --bg: #0a0a0b;
+  --panel: rgba(244, 240, 232, .045);
+  --panel-2: rgba(244, 240, 232, .075);
+  --line: rgba(244, 240, 232, .085);
+  --line-strong: rgba(244, 240, 232, .16);
+  --text: #f2eee6;               /* 骨白：比纯白柔，放在照片旁不刺眼 */
+  --dim: #a6a096;
+  --dim-2: #8b857b;              /* 三级文字：AA 正文级（深底 5.3:1，面板上 5.0:1） */
+  --sheen-1: linear-gradient(180deg, rgba(244,240,232,.032), rgba(244,240,232,.008));
+  --sheen-2: linear-gradient(180deg, rgba(244,240,232,.028), rgba(244,240,232,.006));
+  --sheen-3: linear-gradient(180deg, rgba(18,18,20,.68), rgba(10,10,11,.88));
+  --head-glass: linear-gradient(180deg, rgba(10,10,11,.9), rgba(10,10,11,.65));
+  /* sticky 表头用的近实心面：不触发 backdrop-filter 的逐帧重模糊（见 .list-head） */
+  --head-near: linear-gradient(180deg, rgba(10,10,11,.96), rgba(10,10,11,.92));
+  --overlay: rgba(19,19,21,.94);
+  --overlay-2: rgba(24,24,26,.96);
+  --toast-bg: rgba(22,22,24,.96);
+  --dialog-bg: rgba(18,18,20,.97);
+  --mask: rgba(4,4,5,.62);
+  --scrim: radial-gradient(120% 90% at 50% 0%, transparent 32%, rgba(8,8,9,.4) 100%),
+           linear-gradient(180deg, rgba(8,8,9,.3), rgba(8,8,9,.72));
+  --scrim-top: radial-gradient(120% 90% at 18% 0%, rgba(255,250,240,.05), transparent 58%);
+  --fs-scrim: radial-gradient(120% 100% at 50% 0%, transparent, rgba(6,6,7,.74));
+  --buf: rgba(244, 240, 232, .14);
+  --control: rgba(244, 240, 232, .06);
+  --control-2: rgba(244, 240, 232, .035);
+  --lift-control: linear-gradient(180deg, var(--control), var(--control-2) 48%);
+  --chip: rgba(244, 240, 232, .1);
+  --text-glow: 0 2px 22px rgba(0, 0, 0, .4);
+  --art-shade: linear-gradient(145deg, var(--panel-2), transparent);
+  --ghost-shade: linear-gradient(145deg, var(--panel-2), rgba(0,0,0,.16));
+  --err-line: rgba(224, 110, 104, .55);
+  --danger-ink: #e08a84;
+  --danger-soft: rgba(224, 120, 112, .12);
+  --edge: inset 0 1px 0 rgba(255, 255, 255, .12);
+  --edge-soft: inset 0 1px 0 rgba(255, 255, 255, .06);
+  /* 抬起件的「漫射顶光」：3px 内收干净的白光，没有一条硬边。
+     为什么不能用 --edge 顶替它：box-shadow 画在**边框之下**，有描边的件（ghost、
+     switch 之外的实心件）那 1px 正好被描边盖住 —— 探针量出来就是「顶边无补光」。
+     background-image 画在 padding box 里，所以顶光用渐变、硬沿留 --edge。 */
+  --top-light: linear-gradient(180deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, 0) 3px);
+  --knob-edge: inset 0 1px 0 rgba(0, 0, 0, .07);
+  --sh-1: 0 1px 2px rgba(0, 0, 0, .24);
+  --sh-2: 0 4px 14px rgba(0, 0, 0, .3);
+  --sh-3: 0 12px 32px rgba(0, 0, 0, .38);
+  --shadow: 0 24px 64px rgba(0, 0, 0, .58);
+  --raised: var(--sh-1), var(--sh-2);
+  --lift: linear-gradient(180deg, var(--accent-up), var(--accent) 52%);
+  /* 反色盘（播放键/主按钮）与白色小件（滑块拇指）各自的斜坡：都是「上面亮、往下收」，
+     但起点不同 —— 播放键的面是 --text，白盘的面是 --on-dark。 */
+  --lift-invert: linear-gradient(180deg, #fdfbf7, var(--text) 52%);
+  --lift-bright: linear-gradient(180deg, #fff, #e6e2db 46%);
+  --row-h: 46px;
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --blur: saturate(1.08) blur(88px);
+
+  /* 玻璃四件套：填充、镜面顶光、1px 上沿收口、大半径扩散影。
+     同一套令牌喂给侧栏/右栏/播放条/浮层 —— 四片玻璃才会像同一种材料。
+     镜面不是一条均匀白边：左上一团大半径高光 + 斜向 115° 的薄光带，模拟光源
+     从左上打来、玻璃片沿对角线折出的那道亮。 */
+  --glass-line: rgba(244, 240, 232, .18);
+  --glass-line-soft: rgba(244, 240, 232, .09);
+  --glass-fill: linear-gradient(155deg, rgba(244,240,232,.12), rgba(244,240,232,.028) 46%, rgba(244,240,232,.06));
+  --glass-soft: rgba(244, 240, 232, .08);
+  --glass-spec: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,0) 15%),
+                radial-gradient(130% 90% at 10% -12%, rgba(255,255,255,.18), transparent 56%),
+                linear-gradient(105deg, transparent 2%, rgba(255,255,255,.1) 15%,
+                                transparent 31%, transparent 76%, rgba(255,255,255,.05));
+  --glass-edge: inset 0 1px 0 rgba(255,255,255,.20),
+                inset 0 -22px 34px -30px rgba(0,0,0,.55),
+                inset 0 -1px 0 rgba(0,0,0,.28);
+  --glass-shadow: 0 18px 48px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.22);
+  /* 玻璃只做纯模糊：面板背后本来就是大半径模糊过的封面与渐变，再叠 saturate/
+     brightness 既不会多出细节，反而把「滚动期摘模糊」变成一次明显的色相跳变。
+     纯模糊与不模糊的画面对照：>6 级色差像素 0.1%，切换肉眼不可见（见
+     tools/probe_glass_toggle.py）；滚动仍能维持 60fps 的摘模糊策略。 */
+  --glass-blur: blur(32px);
+  /* 折射边：1px 渐变环，左上亮、右下沉。实线描边画不出「玻璃厚度」，
+     这一环才是 iOS 液态玻璃在 1× 下最容易被认出来的东西。 */
+  --glass-rim: linear-gradient(158deg,
+                 rgba(255,255,255,.6) 0%, rgba(255,255,255,.22) 9%,
+                 rgba(255,255,255,.04) 26%, rgba(255,255,255,.02) 60%,
+                 rgba(255,255,255,.1) 88%, rgba(255,255,255,.2) 100%);
+  --main-veil: linear-gradient(180deg, rgba(10,10,11,.10), rgba(10,10,11,.34));
+  --main-spec: radial-gradient(80% 60% at 14% -8%, rgba(255,255,255,.09), transparent 64%);
+  --row-hover: rgba(244, 240, 232, .065);
+  --row-playing: rgba(244, 240, 232, .095);
+  --nav-active: linear-gradient(180deg, rgba(244,240,232,.13), rgba(244,240,232,.05));
+  --seg-active: linear-gradient(180deg, rgba(244,240,232,.20), rgba(244,240,232,.10));
+  /* 背景色域：四团大半径、互不重叠的冷暖光。封面再灰，玻璃后面也有一层
+     真正看得见的颜色；它们全部是静止渐变，不进合成器动画。 */
+  --mesh-1: radial-gradient(50% 42% at 88% 2%, rgba(96,132,208,.20), transparent 72%);
+  --mesh-2: radial-gradient(46% 40% at 4% 12%, rgba(201,168,106,.16), transparent 72%);
+  --mesh-3: radial-gradient(52% 44% at 82% 98%, rgba(198,116,92,.14), transparent 72%);
+  --mesh-4: radial-gradient(46% 42% at 16% 92%, rgba(86,168,152,.13), transparent 72%);
+  --mesh-base: linear-gradient(112deg, rgba(201,168,106,.1), transparent 42%, rgba(96,132,208,.1));
+  --wall-silk: linear-gradient(116deg, transparent 24%, rgba(255,255,255,.035) 36%,
+                               transparent 50%, rgba(255,255,255,.02) 72%, transparent 88%);
+  /* 封面上的斜向镜面：只叠在右栏/全屏大图上，不给每张列表小图加层 */
+  --art-sheen: linear-gradient(150deg, rgba(255,255,255,.16), rgba(255,255,255,0) 34%,
+                              rgba(255,255,255,0) 72%, rgba(255,255,255,.06));
+  /* 底噪：封面取色的两团光晕 + 一层固定的冷暖对置光。封面再暗、再灰，
+     玻璃后面也有层次 —— 只靠封面色的话，黑色专辑会把整页压回一块平黑。
+     静止绘制、不进动画，闲置账单不受影响。 */
+  --aurora: radial-gradient(58% 52% at 84% 2%, var(--accent-soft), transparent 70%);
+  --aurora-2: radial-gradient(46% 44% at 6% 98%, var(--accent-soft), transparent 72%);
+  --ambient-a: radial-gradient(62% 54% at 14% -4%, rgba(86, 112, 168, .18), transparent 70%);
+  --ambient-b: radial-gradient(58% 50% at 90% 104%, rgba(188, 126, 74, .14), transparent 72%);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  /* 底色比旧版压深一档：白玻璃要有「后面」才浮得起来。纸色仍是暖的，不是冷灰。 */
+  --bg: #e5ded2;
+  --panel: rgba(255, 255, 255, .58);
+  --panel-2: rgba(255, 255, 255, .8);
+  --line: rgba(28, 25, 21, .1);
+  --line-strong: rgba(28, 25, 21, .18);
+  --text: #1a1815;
+  --dim: #544f47;
+  --dim-2: #625c53;              /* 旧 #97908a 在浅底上只有 2.77:1 —— 「浅灰看着糊」的真凶 */
+  --salt: #8a6a32;
+  --accent-ink: #7a5a26;         /* 浅底上强调色当文字必须压深 */
+  --sheen-1: linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,.32));
+  --sheen-2: linear-gradient(180deg, rgba(255,255,255,.56), rgba(255,255,255,.28));
+  --sheen-3: linear-gradient(180deg, rgba(248,244,236,.82), rgba(241,237,230,.94));
+  --head-glass: linear-gradient(180deg, rgba(243,239,232,.94), rgba(243,239,232,.72));
+  --head-near: linear-gradient(180deg, rgba(243,239,232,.97), rgba(243,239,232,.94));
+  --overlay: rgba(252,250,246,.94);
+  --overlay-2: rgba(252,250,246,.97);
+  --toast-bg: rgba(252,250,246,.97);
+  --dialog-bg: rgba(252,250,246,.98);
+  --mask: rgba(40, 34, 26, .28);
+  /* 旧浅色稿把底色压到 .7/.93，等于把封面光和色域全糊成一张米纸。
+     现在不用白纱「提亮」，改用一层暖灰暗角「压深」：背景越有明暗，白玻璃越浮。
+     白纱留给顶光（--scrim-top），暗角负责四周，于是中心亮、边缘沉，像一束天光。 */
+  --scrim: radial-gradient(120% 94% at 50% 0%, transparent 36%, rgba(96,72,50,.24) 100%),
+           linear-gradient(180deg, rgba(110,86,62,.04), rgba(110,86,62,.18));
+  --scrim-top: radial-gradient(120% 90% at 16% 0%, rgba(255,255,255,.52), transparent 62%);
+  --fs-scrim: radial-gradient(120% 100% at 50% 0%, transparent, rgba(244,239,231,.86));
+  --buf: rgba(26, 24, 21, .12);
+  /* 浅色主题下「白上加白」是材质陷阱：控件面必须比背景暗一点才分得出层。
+     顶更亮、底更暗，edge 与 gloss 同源同涨；上限由探针的 gloss≤9 兜着。 */
+  --control: rgba(150, 138, 120, .22);
+  --control-2: rgba(150, 138, 120, .46);
+  --text-glow: 0 2px 16px rgba(255, 255, 255, .6);
+  --err-line: rgba(180, 50, 45, .5);
+  --danger-ink: #9c3b34;
+  --danger-soft: rgba(156, 59, 52, .09);
+  --edge: inset 0 1px 0 rgba(255, 255, 255, .22);
+  --edge-soft: inset 0 1px 0 rgba(255, 255, 255, .12);
+  --top-light: linear-gradient(180deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, 0) 3px);
+  --chip: rgba(28, 25, 21, .09);
+  --lift-invert: linear-gradient(180deg, #332e29, var(--text) 48%);
+  --shadow: 0 24px 56px rgba(55, 45, 30, .16);
+  --sh-1: 0 1px 2px rgba(55, 45, 30, .12);
+  --sh-2: 0 4px 14px rgba(55, 45, 30, .12);
+  --sh-3: 0 12px 30px rgba(55, 45, 30, .14);
+  --accent-soft: rgba(160, 120, 58, .13);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235f5a53' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  /* 浅色玻璃：白面 + 近白顶光 + 一层极淡的暖灰收口。纯白描边在暖纸底上看不见，
+     所以「边界」交给暖灰，「镜面」交给白。
+     旧稿的 .66/.34/.52 白 + saturate(1.12) 等于一块磨砂塑料；这一版把填充压到
+     .30/.12/.28，让背景色真的透进来；上沿 1px 纯白 + 6px 白晕做玻璃厚度。
+     玻璃本身只做纯模糊、不再 saturate/brightness：背景色域已经降饱和，
+     面板不该再当放大器，否则滚动时一摘模糊就是一次色相跳变。 */
+  --glass-line: rgba(64, 48, 34, .24);
+  --glass-line-soft: rgba(64, 48, 34, .12);
+  /* 奶白不再从 60% 起步：那一版把背景的色差抹平，玻璃只剩「白」没有「液态」。
+     现在顶左更透、底右更奶，背景的色差直接透进来 —— 面板比背景更通透，
+     而不是靠高饱和把颜色「提纯」成眩目的彩带。 */
+  --glass-fill: linear-gradient(158deg, rgba(252,253,255,.30) 0%,
+                                rgba(250,252,255,.12) 46%,
+                                rgba(253,254,255,.28) 100%);
+  --glass-soft: rgba(255, 255, 255, .42);
+  --glass-spec: linear-gradient(180deg, rgba(255,255,255,.96) 0, rgba(255,255,255,.30) 2px,
+                                rgba(255,255,255,0) 26px),
+                radial-gradient(120% 76% at 6% -14%, rgba(255,255,255,.72), transparent 54%),
+                linear-gradient(105deg, transparent 2%, rgba(255,255,255,.22) 15%,
+                                rgba(255,255,255,0) 31%, rgba(255,255,255,0) 76%,
+                                rgba(255,255,255,.12));
+  --glass-edge: inset 0 1px 0 rgba(255,255,255,1), inset 0 2px 10px rgba(255,255,255,.5),
+                inset 1px 0 0 rgba(255,255,255,.42), inset -1px 0 0 rgba(255,255,255,.2),
+                inset 0 -30px 40px -34px rgba(70,52,34,.46),
+                inset 0 -1px 0 rgba(255,255,255,.5);
+  --glass-shadow: 0 30px 70px -24px rgba(76,56,34,.42),
+                  0 10px 26px -12px rgba(76,56,34,.22),
+                  0 1px 2px rgba(76,56,34,.14);
+  --glass-blur: blur(30px);
+  --glass-rim: linear-gradient(158deg,
+                 rgba(255,255,255,.95) 0%, rgba(255,255,255,.6) 7%,
+                 rgba(255,255,255,.14) 22%, rgba(255,255,255,.02) 55%,
+                 rgba(72,52,32,.16) 86%, rgba(72,52,32,.34) 100%);
+  --main-veil: linear-gradient(172deg, rgba(252,253,255,.15), rgba(253,254,255,.28));
+  --main-spec: radial-gradient(84% 58% at 12% -10%, rgba(255,255,255,.5), transparent 60%);
+  --row-hover: rgba(255, 255, 255, .66);
+  --row-playing: rgba(255, 255, 255, .84);
+  --nav-active: linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.66));
+  --seg-active: linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.72));
+  /* 浅色背景色域：之前四团光到 .5–.66、底色到 .58–.62，在暖纸底上等于开了一盏
+     彩灯，玻璃一透就眩目。现在整体压到原来的一半左右，并把色相往暖灰/雾蓝收，
+     只留「能看出颜色层次」的强度；玻璃的通透感交给边框与顶光，不靠高饱和撑。 */
+  --mesh-1: radial-gradient(52% 46% at 86% 6%, rgba(92,120,208,.30), rgba(92,120,208,.12) 46%, transparent 74%);
+  --mesh-2: radial-gradient(48% 42% at 8% 14%, rgba(226,166,108,.28), rgba(236,196,150,.10) 48%, transparent 76%);
+  --mesh-3: radial-gradient(54% 46% at 80% 96%, rgba(214,132,148,.22), rgba(214,132,148,.08) 50%, transparent 78%);
+  --mesh-4: radial-gradient(48% 44% at 16% 90%, rgba(82,178,156,.24), rgba(82,178,156,.08) 48%, transparent 76%);
+  /* 一条横贯全屏的冷暖对置底色：左暖沙、中奶白、右雾蓝/藕紫。
+     径向光团只照顾四角，中间是它们互相抵消后的灰白 —— 加这一层，
+     三片玻璃从左到右才会真的映出不同的颜色，而不是同一块米白。 */
+  --mesh-base: linear-gradient(108deg, rgba(244,196,146,.28) 0%, rgba(248,232,216,.16) 32%,
+                               rgba(232,224,244,.16) 64%, rgba(156,180,224,.26) 100%);
+  /* 一条斜向「绸光」：没有它，背景是一张完全平滑的渐变，磨砂层 blur 再多也看不出
+     折射；有了这道中频亮带，玻璃后的人才真的有东西可透。 */
+  --wall-silk: linear-gradient(116deg, transparent 22%, rgba(255,255,255,.34) 35%,
+                               rgba(255,255,255,.06) 47%, transparent 58%,
+                               rgba(255,255,255,.2) 76%, transparent 90%);
+  --art-sheen: linear-gradient(150deg, rgba(255,255,255,.28), rgba(255,255,255,0) 34%,
+                              rgba(255,255,255,0) 72%, rgba(255,255,255,.1));
+  --ambient-a: radial-gradient(62% 54% at 14% -4%, rgba(120, 140, 180, .07), transparent 70%);
+  --ambient-b: radial-gradient(58% 50% at 90% 104%, rgba(190, 130, 80, .06), transparent 72%);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-weight: 400; font-size: var(--fs-body); line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+}
+
+/* ------------------------------------------------------------ icon system */
+/* 线性图标只继承 currentColor 和笔宽；尺寸由使用处给（.nav-item / .icon-btn / ...）。
+   所有图标都是 24 网格、1.6px 笔画、圆头圆角 —— 和字重 500–600 的骨白文字同族。 */
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.ic {
+  width: 18px; height: 18px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round;
+  overflow: visible; vertical-align: -0.18em;
+}
+.ic.fill { fill: currentColor; stroke: none; }
+button .ic, a .ic { pointer-events: none; }
+
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent-line); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+/* 两端按钮必须显式关掉：自定义过 ::-webkit-scrollbar 宽度后，Blink 仍可能在细滚动条
+   末端画一个默认按钮（全屏歌词右边缘出现过 6x11 的纯白小块，run 6 的 09_fullscreen.png）。 */
+::-webkit-scrollbar-button { width: 0; height: 0; display: none; }
+
+/* ------------------------------------------------------------ backdrop */
+.stage { position: relative; height: 100%; z-index: 0; }
+.backdrop { position: fixed; inset: -12%; z-index: -1; overflow: hidden; }
+.bd {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center;
+  filter: var(--blur); opacity: .5;
+  transform: scale(1.24);
+  transition: opacity var(--t-fade) var(--ease), transform var(--t-drift) linear;
+}
+.bd-b { opacity: 0; }
+.bd-grain {
+  position: absolute; inset: 0;
+  background: var(--mesh-1), var(--mesh-2), var(--mesh-3), var(--mesh-4),
+              var(--mesh-base), var(--wall-silk), var(--aurora), var(--aurora-2),
+              var(--ambient-a), var(--ambient-b), var(--scrim-top), var(--scrim);
+}
+/* 浅色封面光要真的照到页面上：旧稿 .16 只够在米纸上留一层灰影。 */
+html[data-theme="light"] .bd { opacity: .16; }
+
+/* 动态流光。两层各走各的椭圆轨迹（34s / 47s），颜色挂在 --accent-soft 上 —— 于是它
+   天然跟着封面取色走，不用另写一份同步逻辑。
+   三条纪律：
+     1) 只用 CSS 动画，不进 rAF：闲置账单（tools/measure_idle_cpu.py）量的是 0 raf/s，
+        任何 JS 循环都会把它打回去；
+     2) 默认 play-state 是 paused，只有「设置开着 + 真的在播 + 页面可见」三个条件同时成立
+        才 running（见下面 html[data-ambient][data-play] 那条）—— 静止的合成层不花钱，
+        一直在飘的层会；
+     3) 不加 filter: blur()：动画中的大层每帧重算模糊就是 CPU 账单，径向渐变本身就是软的。 */
+.bd-flow { position: absolute; inset: -18%; opacity: 0; pointer-events: none;
+  transition: opacity var(--t-x) var(--ease); }
+html[data-ambient="on"] .bd-flow { opacity: .24; }
+html[data-theme="light"][data-ambient="on"] .bd-flow { opacity: .16; }
+.bd-flow i {
+  position: absolute; width: 68%; height: 68%; border-radius: var(--r-circle);
+  background: radial-gradient(circle at 50% 50%, var(--accent-soft), transparent 70%);
+  will-change: transform; animation: flow-a 34s linear infinite; animation-play-state: paused;
+}
+.bd-flow i + i { width: 56%; height: 56%; left: auto; right: -6%; top: auto; bottom: -8%;
+  animation-name: flow-b; animation-duration: 47s; }
+html[data-ambient="on"][data-play="1"] .bd-flow i { animation-play-state: running; }
+@keyframes flow-a {
+  0%   { transform: translate3d(4%, 6%, 0) scale(1); }
+  50%  { transform: translate3d(26%, -12%, 0) scale(1.18); }
+  100% { transform: translate3d(4%, 6%, 0) scale(1); }
+}
+@keyframes flow-b {
+  0%   { transform: translate3d(-8%, -4%, 0) scale(1.1); }
+  50%  { transform: translate3d(-30%, 14%, 0) scale(.92); }
+  100% { transform: translate3d(-8%, -4%, 0) scale(1.1); }
+}
+
+/* ------------------------------------------------------------ layout grid */
+.stage {
+  display: grid;
+  grid-template-columns: 246px minmax(420px, 1fr) 372px;
+  grid-template-rows: minmax(0, 1fr) 88px;
+  grid-template-areas:
+    "side main np"
+    "player player player";
+}
+.stage.np-hidden { grid-template-columns: 246px minmax(420px, 1fr) 0; }
+.stage.np-hidden .np { display: none; }
+.stage.side-hidden { grid-template-columns: 0 minmax(420px, 1fr) 372px; }
+.stage.side-hidden .side { display: none; }
+
+/* ------------------------------------------------------------ sidebar */
+.side {
+  grid-area: side;
+  display: flex; flex-direction: column;
+  padding: 16px 10px 12px 18px;
+  background: var(--sheen-1);
+  border-right: 1px solid var(--line);
+  min-height: 0;
+}
+
+.brand { display: flex; align-items: center; gap: 11px; padding: 2px 4px 18px; }
+/* 品牌块不再是一块高饱和实心橙：黄铜描边的哑面小方片 + 黄铜线性盐标。
+   让「盐」只出现在这一枚记号里，别的界面元素一律中性。 */
+.brand-mark {
+  width: 36px; height: 36px; display: grid; place-items: center;
+  border-radius: var(--r-md); color: var(--accent-ink);
+  background-color: var(--panel);
+  background-image: var(--top-light), var(--lift-control);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--edge-soft);
+}
+.brand-mark .ic { width: 21px; height: 21px; stroke-width: 1.5; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.18; }
+.brand-text b { font-family: var(--font-display); font-size: var(--fs-lead); font-weight: 650; letter-spacing: .4px; }
+.brand-text span { font-size: var(--fs-micro); color: var(--dim-2); letter-spacing: 1.65px; text-transform: uppercase; }
+/* 抽屉里必须有看得见的出口：遮罩和 Esc 都能关，但只有按钮能「看见」。 */
+.side-close { margin-left: auto; flex: none; }
+
+/* 侧栏在 1320×830（本机最常见的窗口）本来就差 27px 才装得下：`.nav` 是滚动容器，
+   滚到底部时「还没有歌单…」那张卡被 side-foot 的边线从字中间切开，看着像画坏了。
+   把组标题/行/空卡的垂直留白各收一点（合计 ~29px），这一档就不出现半行；更矮的窗口
+   仍可滚动，靠下面的细滚动条与上下渐隐说明「还有内容」，而不是一刀切。
+   滚动条平时透明、hover/键盘聚焦才显形（macOS 覆盖式滚动条的手感），不抢侧栏的注意力。 */
+.nav {
+  flex: 1; overflow-y: auto; min-height: 0; padding-right: 6px;
+  overscroll-behavior: contain;
+  /* 不写 scrollbar-width: 新版 Chromium 一旦认了它，就会把下面 ::-webkit-scrollbar
+     那套透明滑块整个忽略，侧栏在窄窗里冒出一条系统灰条（无头审计 1100×760 实测）。
+     本应用只跑 Chromium，直接交给 webkit 伪元素即可。 */
+}
+.nav::-webkit-scrollbar { width: 8px; }
+.nav::-webkit-scrollbar-thumb {
+  background: transparent; border: 2px solid transparent; background-clip: padding-box;
+  border-radius: var(--r-pill);
+}
+.nav:hover::-webkit-scrollbar-thumb, .nav:focus-within::-webkit-scrollbar-thumb {
+  background: var(--line-strong); border: 2px solid transparent; background-clip: padding-box;
+}
+/* 上下渐隐只在「确实还能往那边滚」时由 JS 挂上（.fade-up/.fade-down）。
+   用 mask 而不是盖一层纯色渐变：侧栏本身是半透明玻璃，纯色块会在浅色主题下露出一条带。 */
+.nav.fade-up { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px); }
+.nav.fade-down { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 18px), transparent 100%); }
+.nav.fade-up.fade-down {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px,
+                      #000 calc(100% - 18px), transparent 100%);
+}
+.nav-group-label {
+  font-size: var(--fs-caption); letter-spacing: .14em; color: var(--dim-2);
+  padding: 14px 10px 6px; display: flex; justify-content: space-between; align-items: center;
+}
+.nav-group-label.with-btn { text-transform: uppercase; }
+.nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 10px; margin: 1px 0;
+  border-radius: var(--r-sm); color: var(--dim); text-decoration: none;
+  font-size: var(--fs-body-s); position: relative;
+  transition: background var(--t) var(--ease), color var(--t) var(--ease);
+}
+.nav-item .ic { width: 17px; height: 17px; opacity: .68; transition: opacity var(--t) var(--ease); }
+.nav-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item em { font-style: normal; font-size: var(--fs-caption); color: var(--dim-2); font-variant-numeric: tabular-nums; }
+.nav-item:hover { background: var(--panel); color: var(--text); }
+.nav-item:hover .ic { opacity: .9; }
+/* 选中态：中性微亮块 + 左侧 2px 黄铜细线。不是整块染色 —— 侧栏里唯一的颜色
+   应该只有那条线，眼睛才能顺着它找到自己现在在哪。 */
+.nav-item.active {
+  background-color: var(--panel-2);
+  color: var(--text); font-weight: 600;
+}
+.nav-item.active .ic { opacity: 1; color: var(--accent-ink); }
+.nav-item.active em { color: var(--accent-ink); }
+.nav-item.active::before {
+  content: ""; position: absolute; left: -10px; top: 50%; width: 2px; height: 16px;
+  margin-top: -8px; border-radius: 0 var(--r-pill) var(--r-pill) 0; background: var(--accent);
+}
+.nav-playlists .nav-item .ic { width: 15px; height: 15px; }
+.nav-item.dragover { outline: 1px dashed var(--accent-line); }
+.nav-item.dragging { opacity: .45; }
+.nav-empty {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; cursor: pointer;
+  padding: 8px 10px; margin: 1px 0; font-size: var(--fs-small); line-height: 1.5; color: var(--dim-2);
+  background: transparent; border: 0; border-radius: var(--r-sm);
+  transition: color var(--t) var(--ease), background var(--t) var(--ease);
+}
+.nav-empty .ic { width: 15px; height: 15px; flex: none; opacity: .8; }
+.nav-empty span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-empty:hover { color: var(--text); background: var(--panel); }
+
+.side-foot { padding-top: 10px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.scan { padding: 2px 2px 0; font-size: var(--fs-caption); color: var(--dim-2); }
+.scan-bar { height: 3px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; margin-bottom: 5px; }
+.scan-bar i { display: block; height: 100%; width: 0; border-radius: var(--r-pill); background: linear-gradient(90deg, var(--accent), var(--accent-up)); transition: width var(--t-x) var(--ease); }
+/* 音乐来源是一件事，不是一行行标签：一个入口写清「几个文件夹 / 多少首」，
+   点开才是目录列表与添加/管理。以前每个库名一枚小圆点、下面再压一只大按钮，
+   两个控件抢同一件事，窄窗口下还会折成两三行。 */
+.lib-source {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit;
+  background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 9px 10px; color: var(--dim); cursor: pointer;
+  transition: color var(--t) var(--ease), border-color var(--t) var(--ease), background var(--t) var(--ease);
+}
+.lib-source:hover { color: var(--text); border-color: var(--line-strong); background: var(--panel); }
+.lib-source .lib-ic { width: 16px; height: 16px; color: var(--accent-ink); opacity: .9; }
+.lib-source .chev { width: 13px; height: 13px; color: var(--dim-2); }
+.lib-source-text { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.lib-source-text b {
+  font-size: var(--fs-body-s); font-weight: 500; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lib-source-text em {
+  font-style: normal; font-size: var(--fs-caption); color: var(--dim-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ghost-btn {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left; font: inherit; font-size: var(--fs-body-s); color: var(--dim);
+  background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 9px 11px; cursor: pointer;
+  transition: color var(--t) var(--ease), border-color var(--t) var(--ease), background var(--t) var(--ease);
+}
+.ghost-btn .ic { width: 15px; height: 15px; color: var(--accent-ink); }
+.ghost-btn:hover { color: var(--text); border-color: var(--line-strong); background: var(--panel); }
+.nav-item.settings { margin: 0; }
+
+/* ------------------------------------------------------------ topbar */
+.main { grid-area: main; position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.topbar {
+  height: 68px; display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 0 28px 0 24px;
+}
+/* 地板 128 而不是 123：返回键 32 + 间距 10 + 「所有歌曲」标题 81.2（letter-spacing .3px
+   把 4 个汉字从 80 撑到 81.2）。123 会让标题只差 0.2px 就省略成「所有歌…」—— 941/1024
+   两档实测到的就是这个亚像素截断，量元素盒子看不出来（scrollWidth==clientWidth）。 */
+.topbar-left { display: flex; align-items: baseline; gap: 10px; flex: 1 1 auto; min-width: 128px; overflow: hidden; }
+.view-title {
+  font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 700;
+  margin: 0; letter-spacing: -.01em; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; flex: 0 0 auto; max-width: 58%;
+}
+.view-sub { font-size: var(--fs-small); color: var(--dim-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
+.topbar-right { display: flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; }
+.search {
+  display: flex; align-items: center; gap: 9px; width: 300px; flex: 0 1 auto; min-width: 92px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 0 13px; height: 38px;
+  transition: border-color var(--t) var(--ease), background var(--t) var(--ease), box-shadow var(--t) var(--ease);
+}
+.search:focus-within { border-color: var(--accent-line); background: var(--panel-2); box-shadow: 0 0 0 3px var(--accent-soft); }
+.search .ic { width: 15px; height: 15px; color: var(--dim-2); }
+.search input {
+  flex: 1; min-width: 0; background: none; border: 0;  color: var(--text);
+  font: inherit; font-size: var(--fs-body-s);
+}
+.search input::placeholder { color: var(--dim-2); }
+/* 原生 type=search 的取消叉在深色栏里是一枚系统灰块，形状、位置都不受控。
+   关掉它，换一只和图标按钮同族的自绘按钮（只在有内容时出现）。 */
+.search input::-webkit-search-cancel-button,
+.search input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; display: none; }
+.search-clear {
+  width: 22px; height: 22px; flex: none; display: grid; place-items: center;
+  border: 0; border-radius: var(--r-circle); background: var(--panel-2); color: var(--dim);
+  cursor: pointer; transition: color var(--t) var(--ease), background var(--t) var(--ease);
+}
+.search-clear:hover { color: var(--text); background: var(--chip); }
+.search-clear .ic { width: 11px; height: 11px; color: currentColor; }
+.search.has-value kbd { display: none; }
+.search kbd {
+  /* 拆成长写法：`font: 600 10px/1 ...` 里的字号不进 font-size 的账，尺度会漏一个口子 */
+  font-family: ui-monospace, monospace; font-weight: 600; font-size: var(--fs-micro); line-height: 1;
+  color: var(--dim-2); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: var(--r-xs); padding: 3px 5px;
+}
+.search:focus-within kbd { display: none; }
+
+.icon-btn {
+  width: 34px; height: 34px; display: grid; place-items: center; flex: none;
+  border: 0; border-radius: var(--r-sm); background: transparent; color: var(--dim);
+  font: inherit; font-size: var(--fs-icon); cursor: pointer;
+  transition: background var(--t) var(--ease), color var(--t) var(--ease), transform var(--t-fast) var(--ease);
+}
+.icon-btn .ic { width: 18px; height: 18px; }
+.icon-btn:hover { background: var(--panel); color: var(--text); }
+.icon-btn:active { transform: scale(.93); }
+.icon-btn.tiny { width: 26px; height: 26px; font-size: var(--fs-body); }
+.icon-btn.tiny .ic { width: 15px; height: 15px; }
+.icon-btn.on { color: var(--accent-ink); background: var(--panel); }
+#btnFav.on .ic, #btnFav2.on .ic, #fsFav.on .ic { fill: currentColor; }
+/* 只在折叠档出现的入口（导航抽屉 / 播放面板）。默认用 display:none 而不是 hidden 属性：
+   折叠档里要由媒体查询直接放出来，不被 [hidden] 的 !important 挡回去。 */
+.only-narrow { display: none; }
+
+.scroller { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 6px 26px 34px; scroll-behavior: smooth; }
+.view { display: block; }
+/* 长列表窗口层：两个撑高块补齐滚动条长度，中间只放视口附近的行。
+   overflow-anchor 关掉——窗口平移时上下占位块正好互补，交给浏览器做锚定反而会抖。 */
+.vlist { display: block; overflow-anchor: none; }
+.vlist-pad { height: 0; }
+
+.listfoot { text-align: center; color: var(--dim-2); font-size: var(--fs-small); padding: 14px 0 6px; display: flex; gap: 8px; justify-content: center; align-items: center; }
+.spin { width: 12px; height: 12px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: var(--r-circle); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ------------------------------------------------------------ row list */
+/* 表头不做 backdrop-filter：它是 sticky 且每帧都压在滚动的行上面，Chromium 87 会为
+   每一帧重新模糊整条带（真机滑动卡顿的一大笔）。改成 .96→.92 的近实心玻璃：仍透出
+   一点背景色，但没有逐帧模糊，也没有整块死板的色带。 */
+.list-head {
+  display: grid; align-items: center; gap: 12px;
+  grid-template-columns: 34px minmax(160px, 3fr) minmax(110px, 2fr) minmax(110px, 2fr) 62px 34px;
+  padding: 9px 12px 8px; font-size: var(--fs-caption); font-weight: 500; letter-spacing: .08em;
+  color: var(--dim-2); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 3;
+  background: var(--head-near);
+}
+.list-head .sortable { cursor: pointer; }
+.list-head .sortable:hover { color: var(--text); }
+.list-head .sortable.sorted { color: var(--accent-ink); }
+
+.row {
+  display: grid; align-items: center; gap: 12px;
+  grid-template-columns: 34px minmax(160px, 3fr) minmax(110px, 2fr) minmax(110px, 2fr) 62px 34px;
+  height: var(--row-h); padding: 0 12px; border-radius: var(--r-sm); cursor: default;
+  position: relative; transition: background var(--t-fast) var(--ease);
+  /* 首屏只放得下十几行，300 行的布局/光栅化会拖慢换页（实测换页长任务 70 ms）。
+     高度是固定的 --row-h（无纵向内边距），离屏行按同一个高度占位，滚回来不会有跳动。 */
+  content-visibility: auto; contain-intrinsic-size: 0 var(--row-h);
+}
+.row:hover { background: var(--panel); }
+/* 行本身进 roving tabindex：键盘焦点要和 hover 一样能看出「停在哪一行」。
+   外描边会被相邻行压住，改成内描边 + 与 hover 同色的底。 */
+.row:focus-visible { background: var(--panel); outline-offset: -2px; }
+/* 正在播放：中性底 + 标题与均衡器走黄铜，不用整行染色。 */
+.row.playing { background: var(--panel); }
+.row.playing .title { color: var(--accent-ink); }
+.row.playing .num { color: var(--accent-ink); }
+.row.selected { outline: 1px solid var(--accent-line); outline-offset: -1px; }
+/* 拖歌曲进「歌单详情页」时整块列表给一个可放状态。这对 dragover/drop 监听刚搬到视图
+   自己的 list 节点上（以前挂常驻 #view：每进一次歌单多一对，闭包里还写死旧 pid），
+   配套的 class 规则以前压根没写 —— 于是拖拽时只有光标变，用户看不出能往哪儿放。
+   只用内描边 + 既有 accent-soft：不加投影、不加彩色光晕。 */
+.tracklist { border-radius: var(--r-md); transition: box-shadow var(--t) var(--ease), background var(--t) var(--ease); }
+.tracklist.dragover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.row.dragging { opacity: .5; }
+.row .num { font-size: var(--fs-small); color: var(--dim-2); font-variant-numeric: tabular-nums; text-align: right; padding-right: 4px; }
+.row:hover .num, .row:focus-visible .num { color: transparent; }
+/* 行号位置的播放提示画成纯 CSS 三角，不用字形 —— 不同字体里的 ▶ 形状和基线差很多。 */
+.row .num::after {
+  content: ""; position: absolute; left: 19px; top: 50%; width: 0; height: 0;
+  transform: translateY(-50%); border-style: solid; border-width: 4px 0 4px 7px;
+  border-color: transparent transparent transparent var(--text);
+  opacity: 0; transition: opacity var(--t-fast);
+}
+.row:hover .num::after, .row:focus-visible .num::after { opacity: .85; }
+.row.playing .num::after { content: none; }
+.row .cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-body-s); }
+.row .cell.sub { color: var(--dim); font-size: var(--fs-small); }
+.row .cell.tiny { color: var(--dim-2); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
+.row .titlecell { display: flex; align-items: center; gap: 12px; }
+.row .mini-cover {
+  width: 34px; height: 34px; border-radius: var(--r-xs); flex: none; object-fit: cover;
+  /* 小封面不叠模糊投影：每行都要为它多光栅一层，滑动时白花钱；
+     只用一条内描边把浅色封面从深底上收住。 */
+  background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line);
+}
+/* 无封面占位（行内、队列内通用）：网格居中放一枚音符，不再用 ♪ 字符 —— 字体的
+   音符基线偏下，行高又只有 34px，字符版在中文回退字体里会掉到格底。 */
+.mini-cover.noart { display: grid; place-items: center; color: var(--dim-2); }
+.mini-cover.noart .ic { width: 15px; height: 15px; opacity: .7; }
+.row .title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .fav { opacity: 0; width: 26px; height: 26px; }
+.row .fav .ic { width: 15px; height: 15px; }
+.row:hover .fav, .row .fav.on { opacity: .85; }
+.row .fav.on { color: var(--accent-ink); }
+.row .fav.on .ic { fill: currentColor; }
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; width: 12px; flex: none; }
+.eq span { width: 2.5px; background: var(--accent); border-radius: var(--r-pill); animation: eqbar .9s ease-in-out infinite; }
+.eq span:nth-child(2) { animation-delay: .25s; } .eq span:nth-child(3) { animation-delay: .5s; }
+@keyframes eqbar { 0%,100% { height: 20%; } 50% { height: 100%; } }
+.paused .eq span { animation-play-state: paused; }
+
+/* ------------------------------------------------------------ grids / cards */
+.grid { display: grid; gap: 22px 16px; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); padding: 16px 4px 8px; }
+.grid.compact { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 16px 12px; }
+.card {
+  cursor: default; position: relative; padding: 0 2px 6px; border-radius: var(--r-md); transition: transform var(--t-med) var(--ease);
+  /* 443 张专辑卡的布局/光栅化是换页那 60–70 ms 长任务的大头。占位高度不能写死：
+     卡片高度随网格列宽变，而 contain-intrinsic-size 量的是**内容盒**（还要加 6px
+     下内边距）。写死会让 26 个字母的累计高度漂几十 px，A–Z 跳到 Z 时落到 Y。
+     这里用 --card-ih，由 calibrateCardIntrinsic() 量一张真实卡片后写入；窗口改宽
+     会重新校准。.card-measure 是那唯一一张临时不跳过布局的卡。 */
+  content-visibility: auto; contain-intrinsic-size: 198px var(--card-ih, 246px);
+}
+.card.card-measure { content-visibility: visible; }
+.card:hover { transform: translateY(-2px); }
+.card-art {
+  /* Chromium 87 (QtWebEngine 5.15) 不认 aspect-ratio，用了会让方形封面塌成 0 高 */
+  position: relative; height: 0; padding-bottom: 100%; border-radius: var(--r-md); overflow: hidden;
+  background: var(--panel-2); box-shadow: var(--sh-1), var(--sh-3);
+  transition: box-shadow var(--t-med) var(--ease);
+}
+.card:hover .card-art { box-shadow: var(--sh-2), var(--sh-3); }
+.card-art::after {
+  /* 1px 内收的封面边：照片四角落在深底上时不会「毛边」；
+     不参与命中，也不给每张卡增加模糊层。 */
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--line); pointer-events: none;
+}
+.card-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; transition: transform var(--t-x) var(--ease); }
+.card:hover .card-art img { transform: scale(1.035); }
+.card-art.round { border-radius: var(--r-circle); }
+.card-name { margin-top: 11px; font-size: var(--fs-body-s); font-weight: 600; letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-sub { font-size: var(--fs-small); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.card-play {
+  position: absolute; right: 10px; bottom: 10px; width: 36px; height: 36px; border-radius: var(--r-circle);
+  border: 0; display: grid; place-items: center; cursor: pointer;
+  color: var(--bg);
+  background-color: var(--text); background-image: var(--top-light), var(--lift-invert);
+  box-shadow: var(--sh-1), var(--sh-2);
+  opacity: 0; transform: translateY(6px); transition: var(--t-med) var(--ease);
+}
+.card-play .ic { width: 15px; height: 15px; fill: currentColor; stroke: none; }
+.card:hover .card-play { opacity: 1; transform: none; }
+.art-placeholder {
+  position: absolute; inset: 0; display: grid; place-items: center; font-size: var(--fs-h1); color: var(--dim-2);
+  background: radial-gradient(circle at 50% 44%, var(--accent-soft), transparent 66%), var(--art-shade);
+}
+/* 无封面不是「一块等加载的灰砖」：给一张压暗的唱片——同心细纹 + 中心标签盘。
+   纯 CSS，零图片、零请求；颜色全部走令牌，所以换主题/换强调色时它自己跟着走。 */
+.art-placeholder::before, .cover-ghost::before {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 66%; height: 66%; border-radius: var(--r-circle);
+  background: repeating-radial-gradient(circle at 50% 50%, transparent 0 5px, var(--line) 5px 6px);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.art-placeholder::after, .cover-ghost::after {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 22%; height: 22%; border-radius: var(--r-circle);
+  background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.art-placeholder .ic, .cover-ghost .ic { position: relative; z-index: 1; }
+.art-placeholder .ic { width: 30px; height: 30px; opacity: .62; stroke-width: 1.35; }
+
+/* ---------------------------------------------------- A–Z 首字母快跳轨 */
+/* 竖排索引挂在 .main 右侧凹槽（.main 已 position:relative，rail 是 #scroller 的兄弟，
+   所以 renderView 清 #view 时它不跟着没 —— 靠那行 .main > .az-rail remove 摘掉）。
+   尺寸/偏移用字面 px：visual_audit 只数 font-size、border-radius、transition 时长、
+   颜色这四类的「字面量种类」，几何不进账；这三类一律引令牌，颜色全走 var()。 */
+.main.has-az .scroller { padding-right: 46px; }
+.az-rail {
+  position: absolute; right: 12px; top: 74px; bottom: 12px; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0; overflow: hidden; pointer-events: none; padding: 6px 3px;
+  border-radius: var(--r-lg);
+  -webkit-user-select: none; user-select: none;
+  /* 静止时是一条安静的书脊；真正要跳字母时，指针进入才把它抬成一张薄玻璃片。
+     以前 27 个字母直接浮在行名上、当前项还是一枚实心白胶囊，看起来像贴歪的滚动条。 */
+  opacity: .62; transition: opacity var(--t) var(--ease), background var(--t) var(--ease), box-shadow var(--t) var(--ease);
+}
+.az-rail:hover, .az-rail:focus-within {
+  opacity: 1; background: var(--head-glass);
+  box-shadow: inset 0 0 0 1px var(--line), var(--sh-2);
+  backdrop-filter: blur(18px);
+}
+.az-key {
+  pointer-events: auto; flex: none; min-width: 16px; height: 15px; padding: 0 2px;
+  display: flex; align-items: center; justify-content: center;
+  font: inherit; font-size: var(--fs-caption); font-weight: 600; letter-spacing: .02em;
+  color: var(--dim-2); background: none; border: 0; border-radius: var(--r-xs);
+  cursor: pointer; transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+/* 「全部」是两字，比单字母宽，放在轨首当复位键 */
+.az-rail .az-key:first-child { width: auto; padding: 0 4px; letter-spacing: 0; }
+.az-key:hover { color: var(--text); background: var(--panel-2); }
+.az-key.on { color: var(--accent-ink); background: var(--accent-soft); font-weight: 700; }
+.az-key.dim { color: var(--dim-2); opacity: .24; cursor: default; }
+.az-key.dim:hover { color: var(--dim-2); background: none; }
+
+/* 艺术家/专辑整表按首字母分区块：每块一个吸附表头，点轨上字母滚到它。
+   玻璃/字号沿用 .list-head 那套，视觉上和列头同族。 */
+.az-head {
+  position: sticky; top: 0; z-index: 3; margin: 0; padding: 8px 12px 5px;
+  font-family: var(--font-display); font-size: var(--fs-h4); font-weight: 650; letter-spacing: .04em;
+  color: var(--accent-ink); background: var(--head-near);
+}
+
+.section { margin: 10px 0 30px; }
+/* 列表页的空态：图标 + 一句解释 + 一个出口。只在「整页真的空」时用，
+   有搜索/筛选条件的空结果仍走列表里那行短句。 */
+.empty-state { display: grid; justify-items: center; gap: 10px; padding: clamp(48px, 12vh, 120px) 20px 40px; text-align: center; }
+.empty-state .es-glyph { width: 72px; height: 72px; display: grid; place-items: center; border-radius: var(--r-circle);
+  color: var(--accent-ink); background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line-strong); }
+.empty-state .es-glyph .ic { width: 26px; height: 26px; }
+.empty-state h3 { margin: 8px 0 0; font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 650; color: var(--text); letter-spacing: -.01em; }
+.empty-state p { margin: 0; font-size: var(--fs-body-s); color: var(--dim); max-width: 46ch; line-height: 1.65; }
+.empty-state .ghost { margin-top: 8px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 6px 4px 6px; }
+.section-head h2 { font-family: var(--font-display); font-size: var(--fs-h4); margin: 0; font-weight: 650; letter-spacing: -.01em; }
+/* 文件夹页的根标题带一枚文件夹记号，和树里的子目录同一族；
+   三个动作收进右侧一组 —— 直接挂在 .section-head 上会被 space-between 摊到整行。 */
+.section-head .folder-title { display: inline-flex; align-items: center; gap: 9px; }
+.section-head .folder-title .ic { width: 16px; height: 16px; color: var(--dim-2); opacity: .8; transform: translateY(1px); }
+.section-actions { display: flex; align-items: center; gap: 14px; flex: none; }
+.section-head .link { font-size: var(--fs-small); color: var(--dim-2); background: none; border: 0; cursor: pointer; font-family: inherit; transition: color var(--t) var(--ease); }
+.section-head .link:hover { color: var(--accent-ink); }
+
+.hero {
+  display: flex; gap: 28px; align-items: flex-end; padding: 26px 4px 30px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.hero-art { position: relative; width: 200px; height: 200px; border-radius: var(--r-lg); overflow: hidden; flex: none; box-shadow: var(--sh-2), var(--shadow); background: var(--panel-2); }
+.hero-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hero-meta { min-width: 0; flex: 1; }
+.hero-kind { font-size: var(--fs-caption); letter-spacing: .18em; color: var(--accent-ink); text-transform: uppercase; }
+.hero-title { font-family: var(--font-display); font-size: clamp(var(--fs-h2), 3.4vw, var(--fs-hero)); font-weight: 700; line-height: 1.08; margin: 8px 0 9px; letter-spacing: -.02em;
+  /* 窄窗口下长标题里的「？」会被挤到下一行行首，孤零零一个字。line-break: strict 按
+     CJK 禁则处理收尾标点（不允许 ？ ！ 》 这类字符起行），两行截断时也不再出现孤字。 */
+  line-break: strict;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hero-sub { color: var(--dim); font-size: var(--fs-body-s); }
+.hero-actions { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
+.hero-actions .ic { width: 14px; height: 14px; }
+.hero-stats { color: var(--dim-2); font-size: var(--fs-small); font-variant-numeric: tabular-nums; margin-top: 6px; }
+
+/* 搜索页的紧凑结果条（艺术家 / 专辑）：一枚缩略图 + 两行字，占一行而不是一张海报。
+   目的很具体 —— 搜索结果的主角是歌曲，别让六个大圆盘把歌曲推到两屏之后。 */
+.match-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 13px 4px 5px; }
+.match {
+  display: flex; align-items: center; gap: 9px; min-width: 0; max-width: min(280px, 100%);
+  padding: 5px 13px 5px 5px; font: inherit; color: inherit; text-align: left; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-pill);
+  transition: background var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+.match:hover { background: var(--panel-2); border-color: var(--line-strong); }
+.match-art {
+  width: 30px; height: 30px; flex: none; display: grid; place-items: center; overflow: hidden;
+  border-radius: var(--r-sm); background: var(--panel-2); color: var(--dim-2);
+}
+.match-art.round { border-radius: var(--r-circle); }
+.match-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.match-art .ic { width: 14px; height: 14px; }
+.match-text { display: grid; gap: 1px; min-width: 0; }
+.match-text b, .match-text em { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.match-text b { font-size: var(--fs-body-s); font-weight: 600; }
+.match-text em { font-style: normal; font-size: var(--fs-caption); color: var(--dim-2); }
+
+button.primary, button.ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: inherit; font-size: var(--fs-body-s); font-weight: 600; border-radius: var(--r-sm); cursor: pointer;
+  padding: 10px 18px; border: 1px solid transparent; transition: var(--t) var(--ease);
+}
+/* 主按钮走骨白（浅色主题自动反成墨黑），不再用橙色填充。
+   满屏封面色已经在动，再叠一块橙色实心件就会像模板。 */
+button.primary {
+  background-color: var(--text); background-image: var(--top-light), var(--lift-invert); color: var(--bg);
+  box-shadow: var(--sh-1), var(--sh-2);
+}
+button.primary .ic { fill: currentColor; stroke: none; }
+button.primary:hover { filter: brightness(1.03); transform: translateY(-1px); }
+button.ghost {
+  background-color: transparent;
+  color: var(--text); border-color: var(--line-strong);
+  box-shadow: none;
+}
+button.ghost:hover { border-color: var(--accent-line); color: var(--accent-ink); background: var(--panel); }
+/* 禁用态得有样子：#setPurge 现在是「先扫描核对再清理」，中途 disabled 一下，
+   没有这条规则的话它看起来和能点时一模一样，用户会连点。 */
+button.primary:disabled, button.ghost:disabled {
+  opacity: .48; cursor: default; transform: none; filter: none; box-shadow: none;
+}
+
+/* folder tree */
+.tree { padding: 8px 0; font-size: var(--fs-body-s); }
+.tree-node { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: var(--r-sm); cursor: pointer; }
+.tree-node:hover { background: var(--panel); }
+.tree-node .tw { width: 12px; display: grid; place-items: center; color: var(--dim-2); font-size: var(--fs-micro); transition: transform var(--t); }
+.tree-node .tw .ic { width: 12px; height: 12px; stroke-width: 1.8; }
+.tree-node.open .tw { transform: rotate(90deg); }
+.tree-node .nm { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-node .nm > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-node .nm .ic { width: 15px; height: 15px; flex: none; opacity: .5; }
+.tree-node .ct { color: var(--dim-2); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
+.tree-children { margin-left: 18px; border-left: 1px solid var(--line); padding-left: 4px; }
+
+/* 视图顶栏（目前只有文件夹页用：树/平铺切换） */
+.view-bar { display: flex; align-items: center; gap: 8px; padding: 2px 0 12px; }
+button.ghost.on {
+  background-color: var(--panel-2); background-image: none;
+  color: var(--text); border-color: var(--accent-line); box-shadow: none;
+}
+button.ghost.on:hover { color: var(--text); border-color: var(--accent); }
+/* 破坏性动作（移除曲库）只做「看得出来」，不做红到尖叫：默认红字 + 红细边，hover 才铺底 */
+button.ghost.danger { color: var(--danger-ink); border-color: var(--err-line); }
+button.ghost.danger:hover { color: var(--danger-ink); border-color: var(--danger-ink); background: var(--danger-soft); }
+
+/* 平铺文件夹：一个目录一行，名字吃满剩余宽度，数字右对齐成一条竖线。
+   和 .row（曲目行）分开设：这里没有播放键，行高也就矮一档。 */
+.folder-flat { display: grid; gap: 2px; padding: 2px 0 24px; }
+.ff-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 74px 86px auto; align-items: center; gap: 12px;
+  padding: 9px 12px; border-radius: var(--r-sm); cursor: pointer; font-size: var(--fs-body-s);
+  transition: background var(--t) var(--ease);
+}
+.ff-row:hover { background: var(--panel); }
+.ff-nm { min-width: 0; display: flex; align-items: center; gap: 9px; font-weight: 500; overflow: hidden; }
+.ff-nm > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ff-nm .ic { width: 15px; height: 15px; flex: none; opacity: .5; }
+.ff-ct, .ff-du { color: var(--dim-2); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; text-align: right; }
+.ff-ex {
+  background: var(--chip); border: 1px solid var(--line-strong); border-radius: var(--r-xs);
+  color: var(--dim); font-size: var(--fs-micro); padding: 2px 7px; white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ now playing */
+.np {
+  grid-area: np; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  border-left: 1px solid var(--line); background: var(--sheen-2);
+}
+.np-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px 20px; }
+/* 右栏标题是三段式玻璃控件：外圈一块薄玻璃、选中项是一枚浮起来的白色胶囊。
+   iOS 26/27 的分段控件就是这么做的 —— 它比下划线更像「可以按的东西」，
+   而且选中块的白色正好在右栏玻璃上再抬一层，材质层次一眼可见。 */
+.np-tabs {
+  display: flex; gap: 2px; background: var(--glass-soft); border: 1px solid var(--glass-line-soft);
+  border-radius: var(--r-pill); padding: 3px; box-shadow: var(--edge-soft);
+}
+.np-tab {
+  font: inherit; font-size: var(--fs-small); border: 0; background: none; color: var(--dim);
+  padding: 5px 12px; border-radius: var(--r-pill); cursor: pointer;
+  transition: color var(--t) var(--ease), background var(--t) var(--ease), box-shadow var(--t) var(--ease);
+}
+.np-tab:hover { color: var(--text); }
+.np-tab.active {
+  background: var(--seg-active); color: var(--text); font-weight: 600;
+  box-shadow: var(--edge-soft), var(--sh-1);
+}
+.np-body { flex: 1; min-height: 0; position: relative; }
+.np-pane { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+
+/* 上下留白让当前行居中，但比例要照顾 320~372px 宽的侧栏（百分比按盒高算），
+   34%/40% 会把可见歌词压到只剩一行 */
+.lyric-box { flex: 1; overflow-y: scroll; padding: 19% 22px 24%; scroll-behavior: smooth; position: relative; }
+/* 歌词滚出可视区时不要「一刀切断半个字」：上下各留 20px 渐隐。
+   mask 只作用在绘制层，滚动与点击不受影响（Chromium 87 只认带前缀的写法）。 */
+.lyric-box:not(.is-empty) {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+}
+/* 没有词的时候别把空态顶在 19% 的留白上：整块居中，右栏至少看起来是「这一页」，
+   而不是一张没加载完的白纸。 */
+.lyric-box.is-empty { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding-top: 0; padding-bottom: 0; overflow-y: hidden; }
+.lyric-box.is-empty .lyric-empty { padding-top: 0; }
+.lyric-box.is-empty .ly { margin-top: 18px; max-width: 100%; }
+.lyric-box::-webkit-scrollbar { width: 6px; }
+/* 细滚动条（6px）：全局滑块规则带 3px 透明边框 + background-clip: padding-box，
+   6px 会被左右边框吃光变成「没有可画区域」，所以这里自己声明 border: 0。
+   （那块纯白小方块的真正来源没能在改后复现，机制只到「候选」：见 ::-webkit-scrollbar-button 那条。） */
+.lyric-box::-webkit-scrollbar-thumb { background: transparent; border: 0; border-radius: var(--r-pill); }
+.lyric-box:hover::-webkit-scrollbar-thumb { background: var(--line-strong); }
+.lyric-lines { display: flex; flex-direction: column; gap: 4px; }
+.lyric-empty { color: var(--dim-2); font-size: var(--fs-body-s); display: grid; gap: 0; justify-items: center; padding-top: 40px; }
+/* 空态也给一件「有做的」东西：一枚哑光唱片标（不是大图标 + 下划线链接）。
+   右栏没词时通常是第一次用，先把「怎么把词放进来」摆成一个像样的次要按钮。 */
+.le-mark {
+  width: 56px; height: 56px; display: grid; place-items: center; margin-bottom: 14px;
+  border-radius: var(--r-circle); color: var(--accent-ink);
+  background: radial-gradient(circle at 50% 35%, var(--accent-soft), transparent 72%), var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.le-mark .ic { width: 22px; height: 22px; opacity: .85; stroke-width: 1.5; }
+.le-title { font-size: var(--fs-body); font-weight: 500; color: var(--dim); }
+.lyric-empty .le-attach {
+  margin-top: 14px; padding: 7px 14px; font-size: var(--fs-small); font-weight: 500;
+  color: var(--dim); border-color: var(--line); background: transparent;
+}
+.lyric-empty .le-attach .ic { width: 14px; height: 14px; color: var(--dim-2); }
+.lyric-empty .le-attach:hover { color: var(--text); border-color: var(--line-strong); background: var(--panel); }
+.lyric-empty .le-attach:hover .ic { color: var(--accent-ink); }
+.link-btn { background: none; border: 0; color: var(--dim); font: inherit; font-size: var(--fs-small); cursor: pointer; padding: 2px 4px; border-radius: var(--r-xs); transition: color var(--t) var(--ease), background var(--t) var(--ease); }
+.link-btn:hover { color: var(--accent-ink); background: var(--panel); }
+.ly {
+  font-size: calc(var(--fs-lead) * var(--ly, 1)); line-height: 1.55; color: var(--dim); text-align: center;
+  padding: 7px 4px; border-radius: var(--r-md); transition: color var(--t-slow) var(--ease), transform var(--t-slow) var(--ease), opacity var(--t-slow);
+  opacity: .5; transform: scale(.99); cursor: pointer;
+}
+.ly:hover { color: var(--text); opacity: .9; }
+.ly .tr { display: block; font-size: .78em; margin-top: 4px; color: var(--dim-2); }
+.ly.on {
+  color: var(--text); opacity: 1; font-weight: 650; transform: scale(1.02);
+  text-shadow: var(--text-glow);
+}
+.ly.on .tr { color: var(--accent-ink); }
+.ly.past { opacity: .26; }
+.ly.near { opacity: .74; }
+html[data-theme="light"] .ly.on { color: var(--text); }
+.stage.ly-top .lyric-box { padding-top: 12%; }
+.stage.ly-top .ly.on { transform: none; }
+
+.queue-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 18px; color: var(--dim-2); font-size: var(--fs-small); }
+.queue-list { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+.q-row {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--r-sm); font-size: var(--fs-body-s); cursor: pointer;
+}
+.q-row:hover { background: var(--panel); }
+.q-row.on { background: var(--panel-2); color: var(--text); }
+.q-row.on .qn b { color: var(--accent-ink); }
+.q-row img { width: 34px; height: 34px; border-radius: var(--r-xs); object-fit: cover; flex: none; }
+.q-row .mini-cover { width: 34px; height: 34px; border-radius: var(--r-xs); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); flex: none; }
+.q-row .qn { flex: 1; min-width: 0; }
+.q-row .qn b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-row .qn span { color: var(--dim-2); font-size: var(--fs-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.q-row .x { opacity: 0; }
+.q-row:hover .x { opacity: .7; }
+
+.meta { padding: 14px 18px; overflow-y: auto; display: grid; gap: 10px; align-content: start; }
+.meta-kv { display: grid; grid-template-columns: 74px 1fr; gap: 10px; font-size: var(--fs-small); align-items: baseline; }
+.meta-kv b { color: var(--dim-2); font-weight: 400; font-size: var(--fs-caption); letter-spacing: .4px; }
+.meta-kv span { word-break: break-all; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-micro); letter-spacing: .6px;
+  /* 染色件的全部身份就是「和板分得出一层」：--control 的 7% 白落在已经抬起的面板上，
+     面/底只有一两成，眼睛看就是一块脏了的底。往上走一档（--chip）再补一条 1px 描边，
+     描边负责「边界」，填充负责「块」—— 徽标不许有厚度，所以没有 --top-light/--edge。 */
+  background: var(--chip); border: 1px solid var(--line-strong); border-radius: var(--r-xs);
+  padding: 1px 6px; color: var(--dim); }
+.badge.hi { color: var(--accent-ink); border-color: var(--accent-line); }
+
+.np-cover-wrap {
+  padding: 20px 20px 20px; border-top: 1px solid var(--line); display: grid; gap: 14px; justify-items: center;
+  /* 右侧栏在 372px（窗口 ≤1180px 时 320px），封面正方形就按这一栏的宽度算：
+     Chromium 87 不认 aspect-ratio，百分比 padding 又只含块宽度有关，
+     所以 30vh 的上限只能挂在使用者（wrap）的 max-width 上 */
+  width: 100%; max-width: calc(30vh + 40px); align-self: center;
+}
+/* 队列/详情页把封面收成一条横向的「正在播放」窄条：这两页的重点是列表本身，
+   一张 264px 的大封面会把队列挤到只剩五行。歌词页仍保留大封面当视觉锚点。 */
+.np-cover-wrap.compact {
+  display: flex; align-items: center; gap: 13px; padding: 12px 18px 14px;
+  width: 100%; max-width: none;
+}
+.np-cover-wrap.compact .np-cover {
+  width: 56px; height: 56px; padding-bottom: 0; flex: none; border-radius: var(--r-md);
+  box-shadow: var(--sh-1), var(--sh-2);
+}
+.np-cover-wrap.compact .cover-ghost::before,
+.np-cover-wrap.compact .cover-ghost::after { display: none; }
+.np-cover-wrap.compact .cover-ghost .ic { width: 20px; height: 20px; opacity: .5; }
+.np-cover-wrap.compact .np-credit { text-align: left; flex: 1; min-width: 0; }
+.np-cover-wrap.compact .np-title { font-size: var(--fs-body-s); }
+.np-cover-wrap.compact .np-artist { font-size: var(--fs-caption); margin-top: 2px; }
+.np-cover-wrap.compact .np-actions { flex: none; gap: 0; }
+.np-cover-wrap.compact .np-actions .icon-btn { width: 30px; height: 30px; }
+.np-cover {
+  width: 100%; height: 0; padding-bottom: 100%; border-radius: var(--r-xl); overflow: hidden; position: relative;
+  box-shadow: var(--sh-2), var(--shadow); background: var(--panel-2);
+  transition: transform var(--t-x) var(--ease), box-shadow var(--t-x);
+}
+.np-cover::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.np-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.np-cover:hover { transform: translateY(-2px); }
+.cover-ghost {
+  position: absolute; inset: 0; display: grid; place-items: center; font-size: var(--fs-glyph); color: var(--dim-2);
+  background: radial-gradient(circle at 50% 44%, var(--accent-soft), transparent 66%), var(--ghost-shade);
+}
+.cover-ghost .ic { width: 34px; height: 34px; opacity: .55; stroke-width: 1.3; }
+.cover-ghost.small .ic { width: 20px; height: 20px; opacity: .5; }
+/* 52px 的播放条小封面塞不下唱片纹：只留中心光晕和音符，纹路会糊成噪点。 */
+.cover-ghost.small::before, .cover-ghost.small::after { display: none; }
+/* 有封面时底纹必须彻底让位：它是后写的兄弟节点，光靠图片不透明并不能保证盖住它
+   （真机上 40_narrow 的右栏封面曾透出一圈纹路和中心标签）。 */
+.np-cover:not(.noart) .cover-ghost,
+.p-cover:not(.noart) .cover-ghost,
+.fs-cover:not(.noart) .cover-ghost { display: none; }
+.np-cover.noart img, .p-cover.noart img, .fs-cover.noart img { opacity: 0; }
+.fs-cover::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.np-credit { text-align: center; min-width: 0; width: 100%; }
+.np-title { font-family: var(--font-display); font-size: var(--fs-lead); font-weight: 650; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-artist { font-size: var(--fs-small); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
+.np-actions { display: flex; gap: 2px; }
+.np-restore {
+  position: fixed; right: 8px; top: 50%; width: 22px; height: 56px; border: 1px solid var(--line);
+  transform: translateY(-50%); border-radius: var(--r-sm); background: var(--panel-2); color: var(--dim);
+  cursor: pointer; z-index: 6; backdrop-filter: blur(14px);
+}
+/* 窄窗口抽屉的遮罩。桌面三栏时它永远不显示；只负责把注意力交给被拉出的那一栏，
+   点它、按 Esc 都关闭，焦点回到打开它的按钮。 */
+.scrim {
+  position: fixed; inset: 0; z-index: 58; background: var(--mask);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity var(--t-med) var(--ease), visibility 0s linear var(--t-med);
+}
+.scrim.show { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity var(--t-med) var(--ease); }
+
+/* ------------------------------------------------------------ player bar */
+.player {
+  /* 中列必须有地板：两侧 minmax(230px,300px) 会先把 300px 拿满，1fr 只剩残渣。
+     实测 761px 视口下中列只有 81px，两个时间标签就把它吃光，进度条 0 宽且拖不动；
+     760 档虽有更窄的一套，761–900 这段仍然中招。给中列 220px 地板后，两侧自动退回
+     230，进度条在 761 下仍有 ~121px 可拖，941 以上完全不受影响。 */
+  grid-area: player; display: grid;
+  grid-template-columns: minmax(230px, 300px) minmax(220px, 1fr) minmax(230px, 300px);
+  align-items: center; gap: 18px; padding: 0 22px;
+  border-top: 1px solid var(--line);
+  background: var(--sheen-3);
+}
+.p-left { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.p-cover { width: 52px; height: 52px; border-radius: var(--r-md); overflow: hidden; position: relative; flex: none;
+  background: var(--panel-2); box-shadow: var(--sh-1), var(--sh-2); }
+.p-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.p-meta { min-width: 0; flex: 1; }
+.p-title { font-size: var(--fs-body-s); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-artist { font-size: var(--fs-small); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+/* 顶掉艺人行的那句歌词：只用文字色分档（--dim → --text），不加底、不加动效 ——
+   这一行 20px 高，任何装饰都会让它和上面的标题打架。禁用 opacity 是为了不塌对比度。 */
+.p-artist.is-lyric { color: var(--text); }
+.p-center { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.p-buttons { display: flex; align-items: center; gap: 8px; }
+.play-btn {
+  width: 42px; height: 42px; border-radius: var(--r-circle); border: 0; cursor: pointer; display: grid; place-items: center;
+  /* 反色盘的塑料白斑来自它**自己那条斜坡**，不是来自 --top-light：上一轮把 12.259 记在
+     顶光头上并撤了顶光，重测 gloss 一位不变（12.259），只有 edge 从 19.4 掉到 15.1 ——
+     说明那条 3px 的沿根本动不了上带中位，压住上半的雾是 --lift-invert 的起点太亮。
+     现在起点收深（见浅色块注释）＋顶光留回来给 1px 上沿。深色主题这枚盘面 L*=96.5，
+     白色顶光加不上去（天花板），由探针记「† 豁免」而不是记通过。 */
+  background-color: var(--text); background-image: var(--top-light), var(--lift-invert); color: var(--bg);
+  transition: transform var(--t) var(--ease), background var(--t);
+  box-shadow: var(--sh-1), var(--sh-2);
+}
+.play-btn:hover { transform: scale(1.06); }
+.play-btn:active { transform: scale(.94); }
+.play-btn.big { width: 62px; height: 62px; }
+.play-btn .tri {
+  width: 0; height: 0; border-style: solid; border-width: 7px 0 7px 12px;
+  border-color: transparent transparent transparent currentColor; margin-left: 3px; color: inherit;
+}
+.play-btn.on .tri {
+  /* 不用 background: linear-gradient(... currentColor ...)：Chromium 87 在「只有 color 变了、
+     background-image 的字面值没变」时不重绘渐变。实测（tools/probe_theme_paint.py）：
+     播放中从深色切浅色，computed 的 triColor/triBg 都已经是新值，像素却还留着旧的 #0c0d11，
+     落在新的 #1c1a19 底上等于看不见；手动触发一次重绘（改 transform）像素才跟上。
+     border 走的是另一条重绘路径（同一页面上播放三角的 border-color: currentColor 切换后是好的），
+     所以暂停条改用 border 画。两个别踩的细节：
+       - `border-color: A B` 里 A 是上下、B 才是左右，写反就变成两条透明边；
+       - 全局 box-sizing: border-box，width 得把 4+4 两条边框算进去：12px = 条4 + 缝4 + 条4。 */
+  border-style: solid; border-width: 0 4px; border-color: transparent currentColor;
+  background: none; width: 12px; height: 14px; margin: 0;
+}
+.p-progress { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 640px; }
+.time { font-size: var(--fs-caption); color: var(--dim-2); font-variant-numeric: tabular-nums; min-width: 38px; text-align: center; }
+
+.bar { position: relative; flex: 1; height: 16px; display: flex; align-items: center; cursor: pointer; touch-action: none; }
+.bar-rail { position: absolute; left: 0; right: 0; height: 3px; border-radius: var(--r-pill); background: var(--line-strong); }
+.bar-buf { position: absolute; left: 0; height: 3px; border-radius: var(--r-pill); background: var(--buf); width: 0; }
+/* 只用当前强调色的同色相斜坡（accent → accent-up）。以前的终点是固定品牌米金，
+   蓝封面时会蓝→金地串色，和「强调色跟着封面走」直接打架。 */
+.bar-fill { position: absolute; left: 0; height: 3px; border-radius: var(--r-pill); width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-up)); }
+.bar-thumb {
+  position: absolute; left: 0; width: 11px; height: 11px; border-radius: var(--r-circle);
+  background-color: var(--on-dark); background-image: var(--lift-bright);
+  /* 和开关旋钮同一个白小件配方：--knob-edge 是它自己那 1px 的收口，
+     只靠外阴影的话 11px 的拇指在浅底上会糊成一颗没有边的点。 */
+  box-shadow: var(--knob-edge), var(--sh-1), var(--sh-2);
+  transform: translateX(-50%) scale(0); transition: transform var(--t) var(--ease);
+}
+.bar:hover .bar-thumb, .bar.dragging .bar-thumb { transform: translateX(-50%) scale(1); }
+.bar:hover .bar-rail, .bar:hover .bar-fill { height: 4px; }
+.bar-tip {
+  position: absolute; bottom: 20px; transform: translateX(-50%); font-size: var(--fs-caption); padding: 2px 7px;
+  background: var(--pepper); color: var(--on-dark); border-radius: var(--r-xs);
+  pointer-events: none; white-space: nowrap;
+  font-variant-numeric: tabular-nums; box-shadow: var(--sh-2);
+}
+.p-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+/* pointer-events:none 不是装饰性收紧：实测 532×559 视口下这块画布（纯读数、aria-hidden）
+   溢出到中间列上方，把 #btnPlay 整颗盖住 —— elementFromPoint 命中的是 canvas，
+   键盘还能用但鼠标点不到播放键。装饰件一律不参与命中。 */
+.spectrum { opacity: .7; pointer-events: none; }
+.vol { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.vol .bar { min-width: 56px; }
+.volbar { width: 92px; }
+
+/* ------------------------------------------------------------ fullscreen */
+.fs { position: fixed; inset: 0; z-index: 40; background: var(--bg); }
+.fs-bg { position: absolute; inset: -10%; background-size: cover; background-position: center; filter: var(--blur); opacity: .44; }
+.fs::after { content: ""; position: absolute; inset: 0;
+  background: var(--aurora), var(--ambient-a), var(--fs-scrim); }
+.fs-inner { position: relative; z-index: 2; height: 100%; display: grid; grid-template-columns: minmax(280px, 42vh) 1fr;
+  /* 行高必须被视口锁死：默认 auto 行会被歌词总高度撑高，封面/控件跟着行一起沉到屏幕外
+     （带 10 行以上歌词时实测：封面只剩底边一条，进度条看不见）。minmax(0,1fr) + 下面
+     两个 min-height:0 让 .fs-lyric 自己滚，而不是把整页撑长。 */
+  grid-template-rows: minmax(0, 1fr);
+  gap: clamp(24px, 6vw, 90px); align-items: center; padding: 56px clamp(32px, 7vw, 110px); }
+.fs-close { position: absolute; left: 22px; top: 18px; z-index: 3; }
+.fs-cover { height: 0; padding-bottom: 100%; border-radius: var(--r-2xl); overflow: hidden; position: relative; box-shadow: var(--sh-2), var(--shadow);
+  background: var(--panel-2); }
+.fs-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.fs-right { min-width: 0; min-height: 0; display: flex; flex-direction: column; height: 100%; }
+.fs-title { font-family: var(--font-display); font-size: var(--fs-fs-title); font-weight: 750; letter-spacing: -.02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-artist { color: var(--dim); margin-top: 5px; font-size: var(--fs-fs-artist); }
+.fs-lyric { flex: 1; min-height: 0; overflow-y: scroll; margin: 26px 0; padding-right: 6px;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 34px, #000 calc(100% - 42px), transparent 100%);
+}
+/* 全屏歌词和侧栏歌词一样：默认不显示滑块，滚动时才露出来 */
+.fs-lyric::-webkit-scrollbar { width: 6px; }
+.fs-lyric::-webkit-scrollbar-thumb { background: transparent; border: 0; border-radius: var(--r-pill); }
+.fs-lyric:hover::-webkit-scrollbar-thumb { background: var(--line-strong); }
+/* 歌词行按视口放大，同时尊重用户「歌词字号」偏好（--ly）：以前全屏这条 clamp 把
+   .ly 的 calc(... * var(--ly)) 整个盖掉了，设置里调大小只影响侧栏，进全屏就失灵。 */
+.fs-lyric .ly { font-size: calc(var(--fs-fs-lyric) * var(--ly, 1)); text-align: left; padding: 7px 0; line-height: 1.62; opacity: .46; }
+/* 侧栏歌词居中可以 scale，全屏歌词是左对齐的：放大 1.03 会把左边缘推出容器，当前行第一个字被切
+   —— 所以全屏当前行靠「更大字号 + 加粗」区分，不靠 transform。 */
+.fs-lyric .ly.on { transform: none; font-size: calc(var(--fs-fs-lyric-on) * var(--ly, 1)); opacity: 1; }
+.fs-lyric.is-empty { display: flex; align-items: center; overflow: hidden; }
+.fs-empty { display: grid; gap: 12px; justify-items: start; max-width: 460px; }
+.fs-empty-icon { width: 68px; height: 68px; display: grid; place-items: center; border-radius: var(--r-circle);
+  color: var(--accent-ink); background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line-strong); }
+.fs-empty-icon .ic { width: 24px; height: 24px; }
+.fs-empty-title { font-size: var(--fs-fs-artist); font-weight: 700; color: var(--text); }
+.fs-empty-hint { font-size: var(--fs-body-s); color: var(--dim); line-height: 1.55; }
+.fs-empty button { margin-top: 6px; }
+.fs-controls { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 10px; }
+.fs-progress { display: flex; align-items: center; gap: 12px; }
+.fs-progress .time { font-size: var(--fs-fs-artist); }
+.fs-buttons { display: flex; align-items: center; justify-content: center; gap: 22px; }
+.fs-buttons .play-btn { width: 54px; height: 54px; }
+
+/* ------------------------------------------------------------ menu / dialog / toast */
+.menu {
+  position: fixed; z-index: 60; min-width: 208px; max-width: min(360px, calc(100vw - 20px));
+  max-height: calc(100vh - 20px); overflow-y: auto; padding: 6px;
+  background: var(--overlay); color: var(--text); border: 1px solid var(--line-strong);
+  border-radius: var(--r-md); box-shadow: var(--edge), var(--shadow); backdrop-filter: blur(22px);
+  animation: pop var(--t) var(--ease);
+}
+.menu button > span:not(.k):not(.sub-arrow) {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+.menu button {
+  display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; font: inherit; font-size: var(--fs-body-s);
+  background: none; border: 0; color: inherit; padding: 8px 11px; border-radius: var(--r-sm); cursor: pointer;
+}
+.menu button:hover { background: var(--panel-2); color: var(--text); }
+.menu button .ic { width: 16px; height: 16px; color: var(--dim); }
+.menu button:hover .ic { color: var(--accent-ink); }
+.menu button i { width: 16px; text-align: center; font-style: normal; opacity: .8; }
+.menu button .k { margin-left: auto; font-size: var(--fs-caption); color: var(--dim-2); }
+.menu button.danger,
+.menu button.danger .ic { color: var(--danger-ink); }
+.menu button.danger:hover,
+.menu button.danger:hover .ic { background: var(--danger-soft); color: var(--danger-ink); }
+.menu button .sub-arrow { margin-left: auto; display: inline-flex; opacity: .55; }
+.menu button .sub-arrow .ic { width: 14px; height: 14px; color: currentColor; }
+.menu button .sub-arrow + .k { margin-left: 10px; }
+.menu .sep { height: 1px; background: var(--line); margin: 5px 4px; }
+.menu .label { font-size: var(--fs-caption); color: var(--dim-2); padding: 6px 11px 3px; letter-spacing: .6px; }
+/* 状态型禁用项（「已在排除名单里」）：留在菜单里 —— 整条消失会让用户以为没这个功能，
+   灰着的那条同时把「现在是什么状态」说了出来。:disabled:hover 这条是必须的：
+   :hover 对 disabled 按钮照样命中，不压掉就会「灰着却能点亮」，读起来像还能点。
+   不可点由 showMenu() 保证（禁用条目根本不绑 onclick），键盘也进不来（disabled 自带跳过）。 */
+.menu button:disabled { opacity: .45; cursor: default; background: none; color: var(--dim); }
+.menu button:disabled i { opacity: .6; }
+.menu button:disabled:hover { background: none; color: var(--dim); }
+.menu .sub { position: relative; }
+.menu .submenu {
+  position: absolute; left: 100%; top: -6px; margin-left: 4px; min-width: 180px; padding: 6px;
+  background: var(--overlay-2); border: 1px solid var(--line-strong); border-radius: var(--r-md); display: none;
+  box-shadow: var(--edge), var(--shadow); backdrop-filter: blur(22px);
+}
+.menu .sub:hover .submenu { display: block; }
+
+.dialog-mask { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center;
+  background: var(--mask); backdrop-filter: blur(6px); animation: pop var(--t) var(--ease); }
+.dialog { width: min(460px, 92vw); background: var(--dialog-bg); border: 1px solid var(--line-strong);
+  border-radius: var(--r-xl); padding: 20px 22px; box-shadow: var(--edge), var(--shadow); color: var(--text); }
+.dialog h3 { margin: 0 0 14px; font-family: var(--font-display); font-size: var(--fs-h4); font-weight: 650; letter-spacing: -.01em; }
+.dialog input[type=text], .dialog input[type=search], .dialog select {
+  width: 100%; font: inherit; font-size: var(--fs-body-s); color: var(--text); background: var(--panel);
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 9px 11px; 
+}
+.dialog input:focus { border-color: var(--accent-line); }
+.dialog-body { display: grid; gap: 12px; max-height: 62vh; overflow-y: auto; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.dialog .hint { font-size: var(--fs-small); color: var(--dim-2); }
+.dialog .list-pick { display: grid; gap: 6px; }
+.dialog .list-pick button { justify-content: flex-start; }
+
+/* settings */
+/* 必须带 #view 作用域：侧栏底部也有一个 .nav-item.settings，裸写 .settings 会把
+   视图根的 grid/max-width 漏到那个链接上（图标和文字竖排成一大块）。 */
+#view .settings { max-width: 660px; margin: 0 auto; padding: 10px 0 40px; display: grid; gap: 22px; }
+.set-block { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 17px 18px; }
+.set-block h3 { margin: 0 0 4px; font-family: var(--font-display); font-size: var(--fs-body); font-weight: 650; letter-spacing: -.005em; }
+.set-block .desc { font-size: var(--fs-small); color: var(--dim-2); margin-bottom: 14px; }
+/* flex-wrap + flex:none 是给窄窗（1100px 时主列只剩 ~480px）兜底的：
+   路径那行没有可断行的空格，会硬把右侧按钮压到「重扫」竖排成两行。
+   按钮保持整块（允许整组换到下一行），文字才在左侧折行。 */
+.set-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; padding: 9px 0; border-top: 1px solid var(--line); }
+.set-row:first-of-type { border-top: 0; }
+/* 给左侧说明一个偏小的基准宽度：flex-wrap 先按基准判断换行、再压缩，
+   基准写成 auto（=最长那行）会让「按钮组」在 1100px 下白白掉到第二行。 */
+.set-row > div:first-child { flex: 1 1 220px; min-width: 0; }
+.set-row > button, .set-row > div:last-child:not(:first-child), .row-actions { flex: none; }
+.set-row button { white-space: nowrap; }
+.row-actions { display: flex; gap: 8px; margin-left: auto; }
+.set-row label { font-size: var(--fs-body-s); }
+.set-row .note { font-size: var(--fs-caption); color: var(--dim-2); margin-top: 2px; overflow-wrap: anywhere; }
+/* 设置页的滑块：Chromium 默认把 range 画成系统蓝，和全站黄铜/骨白完全两套语言。
+   轨道用一条 3px 细线，已走部分填 --accent（由 paintRange 写 --fill），拇指是一枚小白片。
+   EQ 的竖推子有自己的 .eq-slider 外观，这里用 :not() 让开。 */
+.set-block input[type="range"]:not(.eq-slider) {
+  -webkit-appearance: none; appearance: none; width: 150px; height: 20px;
+  background: transparent; cursor: pointer;
+}
+.set-block input[type="range"]:not(.eq-slider)::-webkit-slider-runnable-track {
+  height: 3px; border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--accent) 0 var(--fill, 50%), var(--line-strong) var(--fill, 50%) 100%);
+}
+.set-block input[type="range"]:not(.eq-slider)::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -5.5px; border-radius: var(--r-circle);
+  background-color: var(--text); background-image: var(--lift-invert);
+  border: 1px solid var(--line-strong); box-shadow: var(--sh-1);
+  transition: box-shadow var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.set-block input[type="range"]:not(.eq-slider):hover::-webkit-slider-thumb {
+  transform: scale(1.08); box-shadow: 0 0 0 3px var(--accent-soft), var(--sh-1);
+}
+.set-block input[type="range"]:not(.eq-slider):focus-visible { outline: none; }
+.set-block input[type="range"]:not(.eq-slider):focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--accent-ink), var(--sh-1);
+}
+.set-block input[type="range"]:not(.eq-slider):disabled { opacity: .45; cursor: default; }
+/* 原生 select 在深色页上是「白底黑字 + 系统箭头」，像贴了一张纸。箭头改成背景图
+   （--select-chevron），底/字/边全部走令牌；展开的系统弹层靠 color-scheme 跟着主题走。 */
+.set-block select {
+  -webkit-appearance: none; appearance: none;
+  font: inherit; font-size: var(--fs-small); color: var(--text);
+  background-color: var(--control); background-image: var(--select-chevron);
+  background-repeat: no-repeat; background-position: right 10px center;
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  padding: 6px 30px 6px 11px; cursor: pointer; max-width: 280px;
+  transition: background-color var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+.set-block select:hover { background-color: var(--chip); }
+.set-block select:disabled { opacity: .5; cursor: default; }
+.set-block select:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+.set-block select option { background: var(--bg); color: var(--text); }
+.stepper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.switch { position: relative; width: 40px; height: 22px; border-radius: var(--r-pill);
+  background-color: var(--line-strong); background-image: var(--top-light), var(--lift-control);
+  box-shadow: var(--edge-soft), var(--sh-1);
+  border: 0; cursor: pointer; transition: background var(--t); flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: var(--r-circle);
+  background-color: var(--on-dark); background-image: var(--lift-bright);
+  box-shadow: var(--knob-edge), var(--sh-1); transition: transform var(--t) var(--ease); }
+.switch.on { background-color: var(--accent); background-image: var(--top-light), var(--lift); }
+.switch.on::after { transform: translateX(18px); }
+.swatches { display: flex; gap: 11px; align-items: center; }
+.swatch {
+  width: 20px; height: 20px; border: 0; border-radius: var(--r-circle); cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.swatch:hover { transform: scale(1.12); }
+/* 「来自封面」开着时整排压暗：颜色不归它们管，但点一下仍然能切回固定色 */
+.swatches.dim .swatch { opacity: .5; }
+.swatches.dim .swatch:hover, .swatches.dim .swatch:focus-visible { opacity: 1; }
+/* 选中态用一圈离体描边（不占色块本身），颜色仍然是主角 */
+.swatch.on { outline: 1px solid var(--text); outline-offset: 3px; }
+.swatch:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
+kbd { font-family: ui-monospace, Consolas, monospace; font-weight: 600; font-size: var(--fs-caption); line-height: 1;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r-xs); padding: 3px 6px; color: var(--dim); }
+.keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 18px; }
+.keys div { display: flex; justify-content: space-between; font-size: var(--fs-small); color: var(--dim); gap: 10px; }
+
+/* 均衡器十段。竖推子是用 rotate(-90deg) 转出来的：orient="vertical" 是 Firefox 专有，
+   -webkit-appearance: slider-vertical 在 Chromium 里已废弃，而转法能把原生键盘操作
+   （←/→ 改增益）和自带的轨道样式都留住。绝对定位让版面只占 .eq-slot 那一格，
+   旋转后多出来的宽度不会把设置块撑开。 */
+.eq-bands { display: flex; justify-content: space-between; gap: 2px; padding: 14px 0 4px; border-top: 1px solid var(--line); }
+.eq-band { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.eq-slot { position: relative; width: 24px; height: 104px; }
+/* 只写带前缀的那一条：unprefixed `appearance` 要 Chrome 89，本 App 的内核是 87。 */
+.eq-slider {
+  -webkit-appearance: none; position: absolute; top: 50%; left: 50%;
+  width: 104px; height: 24px; margin: 0; background: transparent; cursor: ns-resize;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+.eq-slider::-webkit-slider-runnable-track {
+  height: 5px; border-radius: var(--r-pill);
+  background-color: var(--line-strong); background-image: var(--lift-control);
+}
+.eq-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: var(--r-circle); margin-top: -5.5px;
+  background-color: var(--on-dark); background-image: var(--lift-bright);
+  box-shadow: var(--knob-edge), var(--sh-1);
+}
+.eq-slider:focus-visible { outline: none; }
+.eq-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--accent-ink), var(--sh-1); }
+.eqv { font-size: var(--fs-micro); color: var(--dim); font-variant-numeric: tabular-nums; }
+.eqh { font-size: var(--fs-caption); color: var(--dim-2); font-variant-numeric: tabular-nums; }
+
+/* 曲库分析：五个汇总数 + 每条格式一行横条 + 码率档徽标。
+   类名一律 qual- 前缀：裸写 .q-row/.qn 会撞上播放队列那套同名选择器。 */
+.qual-head { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 6px 0 14px; }
+.qual-head > div { display: flex; align-items: baseline; gap: 5px; }
+.qual-head b { font-size: var(--fs-h3); font-weight: 700; font-variant-numeric: tabular-nums; }
+.qual-head span { font-size: var(--fs-caption); color: var(--dim-2); }
+.qual-table { display: grid; gap: 6px; }
+.qual-row {
+  display: grid; grid-template-columns: 62px minmax(0, 1fr) 44px 40px 60px 54px;
+  align-items: center; gap: 9px; font-size: var(--fs-caption); color: var(--dim);
+}
+.qual-f { font-weight: 600; color: var(--text); letter-spacing: .3px; white-space: nowrap; }
+.qual-f i { font-style: normal; font-weight: 400; color: var(--accent-ink); }
+.qual-bar { height: 5px; border-radius: var(--r-pill); background: var(--line-strong); overflow: hidden; }
+.qual-bar i { display: block; height: 100%; border-radius: var(--r-pill);
+  background-color: var(--accent); background-image: var(--lift); }
+.qual-n, .qual-b, .qual-d, .qual-s { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.qual-bands { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 0 4px; }
+.qual-chip {
+  display: flex; align-items: baseline; gap: 5px; padding: 4px 10px; border-radius: var(--r-pill);
+  background: var(--chip); border: 1px solid var(--line-strong);
+  font-size: var(--fs-caption); color: var(--dim);
+}
+.qual-chip b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.qual-chip em { font-style: normal; color: var(--dim-2); font-variant-numeric: tabular-nums; }
+
+/* toasts
+   气泡是浮层，但**不许吃掉它下面控件的点击**：2026-10-22 的验收里，「清空队列」的撤销气泡
+   （带按钮时常住 6.5 s）正好悬在播放面板底部那排 ♥/A±/⤢ 上方，点收藏的鼠标落在气泡上，
+   ♡ 一点没变、收藏列表也没多一首 —— 看起来就是「收藏按钮失灵」。气泡自身不承担任何点击，
+   只有「撤销」按钮需要可点，所以容器穿透、按钮单独收回指针事件。 */
+.toasts { position: fixed; right: 18px; bottom: 104px; z-index: 80; display: grid; gap: 8px; justify-items: end;
+  pointer-events: none; }
+.toast { background: var(--toast-bg); color: var(--text); border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  padding: 10px 15px; font-size: var(--fs-body-s); box-shadow: var(--edge), var(--shadow); backdrop-filter: blur(18px);
+  animation: slidein var(--t-med) var(--ease); display: flex; align-items: center; gap: 10px; }
+.toast.err { border-color: var(--err-line); }
+.toast-msg { min-width: 0; }
+.toast-act {
+  font: inherit; font-size: var(--fs-small); font-weight: 600; color: var(--accent-ink);
+  background: transparent; border: 1px solid var(--accent-line); border-radius: var(--r-pill);
+  padding: 3px 11px; cursor: pointer; white-space: nowrap; pointer-events: auto;
+  transition: background var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+.toast-act:hover { background: var(--accent-soft); border-color: var(--accent); }
+.toast.ok::before { content: "✓"; color: var(--accent-ink); }
+@keyframes slidein { from { opacity: 0; transform: translateX(24px); } }
+
+/* welcome */
+.welcome { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; }
+.welcome-card { max-width: 480px; text-align: center; display: grid; gap: 12px; justify-items: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-2xl); padding: 34px 34px 28px;
+  backdrop-filter: blur(20px); box-shadow: var(--shadow); }
+.welcome-icon { color: var(--accent-ink); }
+.welcome-icon .ic { width: 34px; height: 34px; stroke-width: 1.3; }
+.welcome-card h2 { margin: 0; font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 650; letter-spacing: -.01em; }
+.welcome-card p { margin: 0; color: var(--dim); font-size: var(--fs-body-s); line-height: 1.7; }
+.welcome-actions { display: flex; gap: 10px; margin-top: 6px; }
+.welcome-manual { display: flex; gap: 8px; width: 100%; }
+.welcome-manual input { flex: 1; font: inherit; font-size: var(--fs-body-s); background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 9px 11px;  }
+.welcome-hint { font-size: var(--fs-small); color: var(--dim-2); min-height: 16px; }
+
+/* misc */
+.drop-hint { position: fixed; inset: 12px; border: 2px dashed var(--accent-line); border-radius: var(--r-2xl);
+  background: var(--accent-soft); z-index: 90; display: grid; place-items: center; font-size: var(--fs-h4); color: var(--accent-ink);
+  pointer-events: none; }
+.view-sub b { color: var(--dim); font-weight: 600; }
+[hidden] { display: none !important; }
+.fade-in { animation: fade var(--t-x) var(--ease); }
+@keyframes fade { from { opacity: 0; transform: translateY(8px); } }
+
+/* ============================================================
+   液态玻璃层（Liquid Glass）
+   三栏不再是贴死的三块板，而是浮在封面光晕上的三片玻璃。
+   四条纪律，缺一条就会退回「便宜」或「卡顿」：
+     1) 玻璃只给固定不动的壳（侧栏 / 右栏 / 播放条 / 浮层）。主列是一大片滚动内容，
+        只铺静态薄纱、不加 backdrop-filter —— 否则每帧重模糊，1792 首必掉帧；
+     2) 圆角、描边、上沿收口、外阴影四件套同源（--glass-*），不再各处手写；
+     3) 光只从左上打来：每片玻璃一条顶光 + 一枚大半径扩散影，不做彩色霓虹；
+     4) 常驻壳完全不挂 backdrop-filter：背后已是大半径模糊的封面底色，实时再模糊
+        的像素差不可见（>6 级 0.1%），却会把软件光栅从 60fps 拖到 30fps。
+        因此滚动期没有任何模糊开关，也就不存在「滚一下闪一下」。
+   ============================================================ */
+
+/* ---- 舞台：三片玻璃之间留 10px 空气，播放条单独浮在底行 */
+/* 12px 的缝：比旧版多 2px，四周留白同步加 2px。三片玻璃之间露出更多背景色，
+   玻璃与底不再是「贴在一起的三块板」；窗口宽度没变，主列只少 4px。 */
+.stage {
+  padding: 14px;
+  gap: 14px;
+  grid-template-columns: 240px minmax(420px, 1fr) 356px;
+  grid-template-rows: minmax(0, 1fr) 84px;
+}
+.stage.np-hidden { grid-template-columns: 240px minmax(420px, 1fr) 0; }
+.stage.side-hidden { grid-template-columns: 0 minmax(420px, 1fr) 356px; }
+
+/* 主列是最大的一片玻璃，但它是滚动内容的容器：不挂 backdrop-filter。
+   背景本身已经被 .bd 的 88px 模糊过，再透一层薄纱就已经是「磨砂」；
+   这一层只负责把内容抬到玻璃上，不负责实时折射 —— 滚动帧率就是在这里保住的。 */
+.main {
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-xl);
+  background: var(--glass-spec), var(--main-spec), var(--main-veil);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+}
+/* 常驻壳不做实时 backdrop-filter：背后已经是大半径模糊过的封面 + 渐变，
+   再模糊一次的像素差 >6 级只有 0.1%（tools/probe_glass_toggle.py）；
+   而三块全屏面板的实时模糊会让软件光栅从 60fps 掉到 30fps。
+   所以「玻璃感」全部交给填充 / 顶光 / 1px 折射环 / 阴影，滚动时零切换、零闪烁。 */
+.side, .np, .player {
+  position: relative;
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+}
+/* 1px 折射环：左上纯白、右下沉暖灰，画在 padding box 里（不占布局），
+   四片玻璃共用同一条边，才会像同一种材料的切面。
+   mask 只留 1px 环 —— 不用 border-image（不认圆角），也不加额外 DOM。 */
+.main::after, .side::after, .np::after, .player::after {
+  content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  border-radius: inherit; padding: 1px;
+  background: var(--glass-rim);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+}
+.side { border-radius: var(--r-xl); padding: 18px 12px 14px 16px; background: var(--glass-spec), var(--glass-fill); }
+.np { border-radius: var(--r-xl); background: var(--glass-spec), var(--glass-fill); }
+/* 播放条不再用近实心的 --sheen-3：它是全宽的一条玻璃，背后就是整页的色域，
+   用实心面等于在底部贴一条米色胶带。和左右两片同一套填充 + 镜面。 */
+.player { border-radius: var(--r-xl); padding: 0 24px; background: var(--glass-spec), var(--glass-fill); }
+
+/* ---- 顶栏：搜索是胶囊，图标是圆形玻璃片 */
+.topbar { padding: 0 18px 0 20px; }
+.search {
+  border-radius: var(--r-pill);
+  background: var(--glass-soft);
+  border-color: var(--glass-line-soft);
+  box-shadow: var(--glass-edge), var(--sh-1);
+  padding: 0 15px;
+}
+.search:focus-within {
+  background: var(--glass-soft);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--glass-edge), var(--sh-1);
+}
+/* 顶栏按钮是圆玻璃片：填充、上沿白线、1px 暖灰边界三件齐上。
+   只给 hover 换个底色的话，浅色主题下它们会像三个悬空的图标。 */
+.icon-btn { border-radius: var(--r-circle); }
+.topbar .icon-btn:not(.on) {
+  background: var(--glass-soft);
+  border: 1px solid var(--glass-line-soft);
+  box-shadow: var(--edge-soft);
+}
+.topbar .icon-btn:hover { background: var(--chip); border-color: var(--glass-line); }
+
+/* ---- 侧栏：选中项是一枚玻璃胶囊，黄铜只留在图标与计数上 */
+.brand-mark { background: var(--glass-spec), var(--glass-fill); border-color: var(--glass-line); box-shadow: var(--glass-edge), var(--sh-1); }
+.nav-item {
+  border-radius: var(--r-pill);
+  padding-left: 16px; padding-right: 12px;
+}
+.nav-item:hover { background: var(--glass-soft); }
+.nav-item.active {
+  background: var(--nav-active);
+  box-shadow: var(--edge-soft), inset 0 0 0 1px var(--glass-line-soft);
+}
+.nav-item.active::before { content: none; }
+.lib-source, .ghost-btn {
+  border-radius: var(--r-pill);
+  background: var(--glass-soft);
+  border-color: var(--glass-line-soft);
+  padding-left: 14px; padding-right: 14px;
+}
+
+/* ---- 列表：行是低圆角玻璃条，正在播放的那行多一圈内收边 */
+.row { border-radius: var(--r-md); }
+.row:hover, .row:focus-visible { background: var(--row-hover); }
+.row.playing { background: var(--row-playing); box-shadow: inset 0 0 0 1px var(--glass-line-soft); }
+.q-row, .ff-row, .tree-node { border-radius: var(--r-md); }
+.q-row:hover, .ff-row:hover, .tree-node:hover { background: var(--row-hover); }
+.q-row.on { background: var(--row-playing); }
+
+/* ---- 卡片：抬起更慢、回弹更软，播放键是一枚带收口的白玻璃盘 */
+.card { transition: transform var(--t-med) var(--ease-spring); }
+.card:hover { transform: translateY(-3px); }
+.card-art { border-radius: var(--r-lg); }
+.card-play { width: 38px; height: 38px; box-shadow: var(--knob-edge), var(--sh-1), var(--sh-2); }
+
+/* ---- 按钮：胶囊 */
+button.primary, button.ghost { border-radius: var(--r-pill); padding: 10px 20px; }
+button.primary { box-shadow: var(--edge-soft), var(--sh-1), var(--sh-2); }
+
+/* ---- 右栏与全屏：大封面压一层斜向镜面；进度条加粗到看得清 */
+.np-cover::before, .fs-cover::before {
+  content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit;
+  background: var(--art-sheen); pointer-events: none;
+}
+.np-cover::after, .fs-cover::after { z-index: 2; }
+.np-cover { transition: transform var(--t-x) var(--ease-spring), box-shadow var(--t-x) var(--ease); }
+.np-cover:hover { transform: translateY(-3px); }
+.play-btn { width: 46px; height: 46px; box-shadow: var(--knob-edge), var(--sh-1), var(--sh-2); }
+.play-btn.big { width: 66px; height: 66px; }
+.p-cover { box-shadow: var(--edge-soft), var(--sh-1), var(--sh-2); }
+.bar-rail, .bar-buf, .bar-fill { height: 4px; }
+.bar:hover .bar-rail, .bar:hover .bar-fill { height: 5px; }
+
+/* ---- 全屏歌词：底图抬高亮度，控制区浮成一片玻璃 */
+.fs-close {
+  background: var(--glass-soft);
+  box-shadow: var(--edge-soft), inset 0 0 0 1px var(--glass-line-soft);
+}
+.fs-close:hover { background: var(--chip); }
+.fs-controls {
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-xl);
+  padding: 16px 20px 12px;
+  background: var(--glass-spec), var(--glass-fill);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* ---- 设置 / 浮层 / 欢迎卡 */
+.set-block {
+  background: var(--glass-fill);
+  border-color: var(--glass-line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--glass-edge);
+  padding: 18px 20px;
+}
+.menu, .menu .submenu { border-radius: var(--r-lg); box-shadow: var(--glass-edge), var(--glass-shadow); }
+.dialog { border-radius: var(--r-2xl); box-shadow: var(--glass-edge), var(--glass-shadow); }
+.toast { border-radius: var(--r-lg); box-shadow: var(--glass-edge), var(--glass-shadow); }
+.welcome-card {
+  background: var(--glass-spec), var(--glass-fill);
+  border-color: var(--glass-line);
+  border-radius: var(--r-2xl);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* ------------------------------------------------------------ 交互态 / 可达性 */
+/* 焦点环。以前全站有 3 处 outline:0（搜索框、对话框输入、欢迎页输入）却一条
+   :focus-visible 都没有 —— 等于「鼠标点了没框，键盘 Tab 也没框」。现在把抑制删掉，
+   统一描一条环，并且用 --accent-ink 而不是 --accent：浅色主题下 --accent 落在浅底上
+   只有 1.88:1，画了等于没画。 */
+:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.menu button:focus-visible, .nav-item:focus-visible, .np-tab:focus-visible,
+.search input:focus-visible, .q-row:focus-visible, .row.selected:focus-visible {
+  outline-offset: -2px;      /* 贴边/在容器里的件：环画在内侧，别糊到邻居或溢出圆角 */
+}
+::selection { background: var(--accent); color: var(--on-accent); }
+
+/* 尊重系统级「减少动态效果」：漂移的背景、浮起来的封面、逐条缩放的歌词是最容易晕的三处。
+   !important 是故意的 —— 这些动效散在十几条规则里，逐条加媒体查询迟早漏一条。 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .bd { transform: none; }
+  .ly { transition: color .01ms !important; }
+}
+
+/* 大屏（≥1600）主列超过 1000px：首页封面跟着涨一档，否则 200px 的方图
+   压不住已经到 --fs-hero 的标题，左边一小块、右边一大片留白。 */
+@media (min-width: 1600px) {
+  .hero { gap: 34px; }
+  .hero-art { width: 240px; height: 240px; }
+}
+@media (max-width: 1180px) {
+  .stage { grid-template-columns: 214px minmax(360px, 1fr) 306px; }
+  .row, .list-head { grid-template-columns: 34px minmax(140px, 3fr) minmax(100px, 2fr) 62px 34px; }
+  .row .albumcell, .list-head .albumcell { display: none; }
+  /* 这一档主列只剩 360–520px，A–Z 索引轨再占 46px 就会把「标题」列压到 140px 以下。
+     与其留一条点不准的窄轨，不如整条收起，把右侧留白还给列表。 */
+  .main.has-az .scroller { padding-right: 26px; }
+  .az-rail { display: none; }
+}
+/* 液态玻璃三栏比旧版各宽 6–8px，1281–1439 档副标题会被 300px 搜索挤掉尾巴。
+   搜索收 60px 换副标题完整（240px 仍放得下占位文字 + 放大镜 + `/` 提示）；
+   1280 以下副标题整条收起，再窄交给 1100 / 940 两档。 */
+@media (max-width: 1439px) {
+  .search { width: 240px; }
+}
+/* 941–1100：三栏还在（主列只剩 ~360–520px），顶栏放不下 240px 搜索 + 三个按钮。
+   这一档把搜索再收窄、隐藏 `/` 提示键，标题靠上面的 128px 地板保住完整字宽；
+   再窄就交给 940 的折叠档。 */
+@media (max-width: 1100px) {
+  .topbar { gap: 10px; padding-right: 16px; }
+  .search { width: 220px; }
+  .search kbd { display: none; }
+}
+/* 液态玻璃三栏更宽（240 + 356 + 20px 空气），1280 以下主列内宽不足：
+   300px 搜索 + 3 个图标 + 返回键之后只剩 ~160px，副标题会被截成半句。
+   与其留半句省略号，不如整条收起 —— 标题、搜索与操作按钮永远优先。
+   （首页副标题已收短为「N 首 · M 张专辑」，1320 档可完整显示。） */
+@media (max-width: 1280px) {
+  .view-sub { display: none; }
+}
+/* 941 以下不再有三栏可放：侧栏和播放面板改成左右抽屉，主内容吃满整宽。
+   以前这里直接 display:none，于是 560×480 的最小窗口里既没有导航也没有歌词面板，
+   只剩一条顶栏和一个播放条 —— 等于把两整块功能藏没了。 */
+@media (max-width: 940px) {
+  .stage, .stage.np-hidden, .stage.side-hidden {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "main" "player";
+  }
+  .stage.np-hidden .np, .stage.side-hidden .side { display: flex; }
+  .side, .np {
+    display: flex; position: fixed; top: 0; bottom: 0; z-index: 59; height: auto;
+    background: var(--overlay); box-shadow: var(--shadow);
+    visibility: hidden;
+    transition: transform var(--t-med) var(--ease), visibility 0s linear var(--t-med);
+  }
+  .side {
+    left: 0; width: min(300px, 86vw);
+    border: 0; border-right: 1px solid var(--line-strong);
+    border-radius: 0 var(--r-xl) var(--r-xl) 0;
+    transform: translateX(-102%);
+  }
+  .np {
+    right: 0; width: min(380px, 90vw);
+    border: 0; border-left: 1px solid var(--line-strong);
+    border-radius: var(--r-xl) 0 0 var(--r-xl);
+    transform: translateX(102%);
+  }
+  .side.mobile-open, .np.mobile-open {
+    transform: none; visibility: visible;
+    transition: transform var(--t-med) var(--ease);
+  }
+  .only-narrow { display: grid; }
+  #btnNpShow { display: none !important; }
+  .topbar { padding: 0 16px 0 14px; }
+}
+
+/* 761–820：两翼控件的最小内容宽度贴着 230 地板，中列又有 220 地板，761 下只剩
+   1px 余量 —— 实测右栏把文档挤出 6px。这一档只收播放条自己的间距与内边距
+   （省 28px），不动其它布局；760 以下还有一整套更窄的规则。 */
+@media (max-width: 820px) {
+  .player { gap: 12px; padding: 0 14px; }
+}
+/* 窄窗口（贴边停放/半屏）：760 这一档三列地板 230+220+230 正好等于整行可用宽度
+   （760−44−36=680），再窄就溢出，所以换这一套压缩布局 —— 早先 532×559 实测
+   完整三列把中列挤成 0：#seekBar 的 left==right==318、aria-valuemax="0"、
+   #tTot 停在 0:00，进度条既看不见也拖不动。
+   这一档把三列地板降到 0/190/84、间距和内边距收窄、频谱收起（窄屏本来就读不出形状）、
+   封面缩到 40：532px 下中列实拿 ≈244px，扣掉两个时间标签(32×2)与间距还剩 ≈164px 可拖。
+   放在 940 档之后是按级联故意排的：同一维度上更窄的那档必须后写才压得住。 */
+@media (max-width: 760px) {
+  .player { grid-template-columns: minmax(0, 1fr) minmax(190px, 2fr) minmax(84px, 1fr);
+            gap: 10px; padding: 0 12px; }
+  .p-cover { width: 40px; height: 40px; }
+  .p-right { gap: 6px; }
+  .p-buttons { gap: 5px; }
+  /* 560 宽时三列的地板只剩这么点：把次要控件收小、把播放条上的「喜欢」摘掉
+     （右栏与全屏里都还在），省下的 40px 全部给歌名 —— 之前标题只能显示「特…」。 */
+  .p-buttons .icon-btn, .p-right .icon-btn { width: 30px; height: 30px; }
+  #btnFav2 { display: none; }
+  /* 搜索页的艺术家/专辑条在窄窗里改成单行横滑：6 位艺人换成 3 行会把「歌曲」
+     整个顶出首屏，而搜索的第一需求仍是歌。换行只在放得下时发生；横条里每个
+     chip 仍是按钮，键盘 Tab 到被遮住的那枚时浏览器会自动把它滚进来。 */
+  .match-row { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .match-row::-webkit-scrollbar { display: none; }
+  .match { flex: 0 0 auto; }
+  .spectrum { display: none; }
+  .p-progress { gap: 8px; }
+  .time { min-width: 32px; }
+  .volbar { width: 48px; }
+  .hero { gap: 18px; padding-top: 18px; }
+  .hero-art { width: 128px; height: 128px; }
+  .hero-actions { flex-wrap: wrap; margin-top: 14px; }
+  /* 专注模式在单列里没有可隐藏的侧栏；这个按钮只剩占位，还会把标题挤成「所有…」。 */
+  #btnMini { display: none; }
+}

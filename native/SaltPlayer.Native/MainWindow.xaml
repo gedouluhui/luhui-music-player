@@ -1,0 +1,1602 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="SaltPlayer.Native.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:SaltPlayer.Native.Models"
+    xmlns:local="using:SaltPlayer.Native"
+    Title="LuHui音乐播放器">
+
+    <Grid x:Name="RootGrid" Background="{StaticResource WindowBackgroundBrush}" SizeChanged="RootGrid_SizeChanged"
+          KeyDown="Root_KeyDown">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="Escape" Invoked="Escape_Invoked" />
+        </Grid.KeyboardAccelerators>
+
+        <!-- ambient wash: muted, no dominant hue -->
+        <Grid IsHitTestVisible="False">
+            <Ellipse Width="1120" Height="1120" HorizontalAlignment="Left" VerticalAlignment="Top"
+                     Margin="-360,-500,0,0" Fill="{StaticResource WashABrush}" />
+            <Ellipse Width="920" Height="920" HorizontalAlignment="Right" VerticalAlignment="Center"
+                     Margin="0,40,-260,0" Fill="{StaticResource WashBBrush}" />
+            <Ellipse Width="760" Height="760" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                     Margin="220,0,0,-380" Fill="{StaticResource WashCBrush}" />
+            <Rectangle x:Name="NoiseLayer" Opacity="0.32">
+                <Rectangle.Fill>
+                    <ImageBrush ImageSource="Assets/noise.png" Stretch="UniformToFill" />
+                </Rectangle.Fill>
+            </Rectangle>
+        </Grid>
+
+        <Grid x:Name="ShellHost" Margin="10,0,10,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="48" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="268" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ======================= title bar ======================= -->
+            <Grid x:Name="TitleDrag" Grid.Row="0" Grid.ColumnSpan="2" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="268" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
+                            Margin="8,0,0,0" IsHitTestVisible="False">
+                    <Border Width="26" Height="26" CornerRadius="8">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#F7B98A" Offset="0" />
+                                <GradientStop Color="#D97B4E" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <FontIcon Glyph="&#xE8D6;" FontSize="13" Foreground="#201208" />
+                    </Border>
+                    <TextBlock Text="LuHui音乐播放器" FontSize="13" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="LUHUI MUSIC PLAYER" FontSize="9.5" CharacterSpacing="120"
+                               Foreground="{StaticResource TextTertiaryBrush}" VerticalAlignment="Center"
+                               Margin="2,2,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                            HorizontalAlignment="Left" Margin="4,0,0,0" IsHitTestVisible="False">
+                    <TextBlock x:Name="TitleNowPlaying" FontSize="12"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <!-- system caption buttons live here; reserve their width -->
+                <Border Grid.Column="2" Width="144" IsHitTestVisible="False" />
+            </Grid>
+
+            <!-- ======================= sidebar ======================= -->
+            <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource GlassPanelStyle}" CornerRadius="22">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <ScrollViewer x:Name="SidebarScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="10,14,10,8" VerticalScrollMode="Enabled"
+                                  SizeChanged="SidebarScroller_SizeChanged" ViewChanged="SidebarScroller_ViewChanged">
+                        <StackPanel x:Name="SidebarContent" Spacing="3" SizeChanged="SidebarScroller_SizeChanged">
+                            <TextBlock Text="快速播放" Style="{StaticResource CaptionText}"
+                                       Margin="13,0,0,7" CharacterSpacing="60" />
+                            <RadioButton x:Name="NavHome" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                         Tag="home" IsChecked="True" Click="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE80F;" FontSize="15" Margin="0,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="此刻" VerticalAlignment="Center" />
+                                </Grid>
+                            </RadioButton>
+                            <RadioButton x:Name="NavFavorites" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                         Tag="favorites" Click="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE006;" FontSize="15" Margin="0,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="我喜欢的" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="NavFavCount" Grid.Column="2" Style="{StaticResource CaptionText}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </RadioButton>
+                            <RadioButton x:Name="NavHistory" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                         Tag="history" Click="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE81C;" FontSize="15" Margin="0,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="最近播放" VerticalAlignment="Center" />
+                                </Grid>
+                            </RadioButton>
+                            <RadioButton x:Name="NavRadio" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                         Tag="radio" Click="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE93E;" FontSize="15" Margin="0,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="随意电台" VerticalAlignment="Center" />
+                                </Grid>
+                            </RadioButton>
+
+                            <TextBlock Text="音乐库" Style="{StaticResource CaptionText}"
+                                       Margin="13,17,0,7" CharacterSpacing="60" />
+                            <RadioButton x:Name="NavSongs" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                         Tag="songs" Click="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE8D6;" FontSize="15" Margin="0,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="所有歌曲" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="NavSongsCount" Grid.Column="2" Style="{StaticResource CaptionText}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </RadioButton>
+                            <RadioButton x:Name="NavAlbums" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                         Tag="albums" Click="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE958;" FontSize="15" Margin="0,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="专辑" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="NavAlbumsCount" Grid.Column="2" Style="{StaticResource CaptionText}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </RadioButton>
+                            <RadioButton x:Name="NavArtists" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                         Tag="artists" Click="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE716;" FontSize="15" Margin="0,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="艺术家" VerticalAlignment="Center" />
+                                </Grid>
+                            </RadioButton>
+                            <RadioButton x:Name="NavFolders" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                         Tag="folders" Click="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE8B7;" FontSize="15" Margin="0,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="文件夹" VerticalAlignment="Center" />
+                                </Grid>
+                            </RadioButton>
+                            <RadioButton x:Name="NavGenres" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                         Tag="genres" Click="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="&#xE8EC;" FontSize="15" Margin="0,0,12,0" />
+                                    <TextBlock Grid.Column="1" Text="流派" VerticalAlignment="Center" />
+                                </Grid>
+                            </RadioButton>
+
+                            <Grid Margin="13,15,6,3">
+                                <TextBlock Text="歌单" Style="{StaticResource CaptionText}"
+                                           CharacterSpacing="60" VerticalAlignment="Center" />
+                                <Button x:Name="PlaylistAddButton" Style="{StaticResource IconButtonStyle}"
+                                        Width="24" Height="24" HorizontalAlignment="Right"
+                                        Click="PlaylistAdd_Click" ToolTipService.ToolTip="新建歌单">
+                                    <FontIcon Glyph="&#xE710;" FontSize="11" />
+                                </Button>
+                            </Grid>
+                            <ItemsControl x:Name="PlaylistNav">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PlaylistInfo">
+                                        <Button Style="{StaticResource NavPlaylistButtonStyle}"
+                                                Click="PlaylistNav_Click"
+                                                RightTapped="PlaylistNav_RightTapped">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <FontIcon Glyph="&#xE8FD;" FontSize="14" Margin="0,0,12,0" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind Name}"
+                                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{x:Bind CountText}"
+                                                           Style="{StaticResource CaptionText}" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="1" Padding="10,6,10,10" Spacing="8">
+                        <RadioButton x:Name="NavSettings" Style="{StaticResource NavRadioStyle}" GroupName="Nav"
+                                     Tag="settings" Click="Nav_Click">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE713;" FontSize="15" Margin="0,0,12,0" />
+                                <TextBlock Grid.Column="1" Text="设置" VerticalAlignment="Center" />
+                            </Grid>
+                        </RadioButton>
+                        <Border Background="{StaticResource ControlFillBrush}"
+                                BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
+                                CornerRadius="13" Padding="12,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE8B7;" FontSize="16" Foreground="{StaticResource TextSecondaryBrush}"
+                                          VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock x:Name="LibraryName" Text="音乐文件夹" FontSize="12.5"
+                                               FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="LibrarySub" Text="正在读取…" Style="{StaticResource CaptionText}"
+                                               Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ======================= content ======================= -->
+            <Grid x:Name="ContentHost" Grid.Row="1" Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid x:Name="HeaderHost" Padding="18,4,18,12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel x:Name="TitleGroup" HorizontalAlignment="Left" Orientation="Horizontal"
+                                Spacing="10" VerticalAlignment="Center">
+                        <Button x:Name="BackButton" Style="{StaticResource IconButtonStyle}" Width="36" Height="36"
+                                VerticalAlignment="Center" Click="Back_Click" Visibility="Collapsed"
+                                ToolTipService.ToolTip="返回">
+                            <FontIcon Glyph="&#xE72B;" FontSize="15" />
+                        </Button>
+                        <StackPanel VerticalAlignment="Center" Spacing="3">
+                            <TextBlock x:Name="ViewTitle" Text="此刻" FontSize="25" FontWeight="Bold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                            <TextBlock x:Name="ViewSub" Text="正在载入曲库…" Style="{StaticResource SubText}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel x:Name="HeaderActions" HorizontalAlignment="Right" Orientation="Horizontal"
+                                Spacing="8" VerticalAlignment="Center">
+                        <Border x:Name="SearchHost" Width="250" Height="36" CornerRadius="12"
+                                Background="{StaticResource ControlFillBrush}"
+                                BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1"
+                                VerticalAlignment="Center">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE721;" FontSize="14" Margin="12,0,0,0"
+                                          Foreground="{StaticResource TextTertiaryBrush}" VerticalAlignment="Center" />
+                                <TextBox x:Name="SearchBox" Grid.Column="1" Background="Transparent"
+                                         BorderThickness="0" PlaceholderText="搜索歌曲、专辑、艺术家"
+                                         FontSize="12.5" VerticalContentAlignment="Center"
+                                         TextChanged="SearchBox_TextChanged" />
+                            </Grid>
+                        </Border>
+                        <ComboBox x:Name="SortBox" Width="124" Height="36" VerticalAlignment="Center"
+                                  FontSize="12.5" SelectionChanged="SortBox_SelectionChanged"
+                                  Visibility="Collapsed" CornerRadius="12">
+                            <ComboBoxItem Content="默认顺序" Tag="default" IsSelected="True" />
+                            <ComboBoxItem Content="标题" Tag="title" />
+                            <ComboBoxItem Content="艺术家" Tag="artist" />
+                            <ComboBoxItem Content="专辑" Tag="album" />
+                            <ComboBoxItem Content="时长" Tag="duration" />
+                            <ComboBoxItem Content="年份" Tag="year" />
+                            <ComboBoxItem Content="最近添加" Tag="added" />
+                            <ComboBoxItem Content="文件大小" Tag="size" />
+                            <ComboBoxItem Content="比特率" Tag="bitrate" />
+                        </ComboBox>
+                        <Button x:Name="SortDirButton" Style="{StaticResource GhostButtonStyle}"
+                                Width="38" Padding="0" Click="SortDir_Click" Visibility="Collapsed"
+                                ToolTipService.ToolTip="切换升序 / 降序">
+                            <FontIcon x:Name="SortDirGlyph" Glyph="&#xE70E;" FontSize="12" />
+                        </Button>
+                        <Button x:Name="AzToggle" Style="{StaticResource GhostButtonStyle}"
+                                Width="38" Padding="0" Click="AzToggle_Click" Visibility="Collapsed"
+                                ToolTipService.ToolTip="按拼音 A–Z 浏览">
+                            <TextBlock Text="A–Z" FontSize="11" FontWeight="SemiBold" />
+                        </Button>
+                        <Button x:Name="PlayAllButton" Style="{StaticResource PrimaryButtonStyle}"
+                                Width="86" Padding="14,0" Click="PlayAll_Click" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE768;" FontSize="12" />
+                                <TextBlock Text="播放" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ShuffleButton" Style="{StaticResource GhostButtonStyle}"
+                                Width="38" Padding="0" Click="Shuffle_Click" Visibility="Collapsed"
+                                ToolTipService.ToolTip="随机播放">
+                            <FontIcon Glyph="&#xE8B1;" FontSize="14" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1">
+                    <!-- ======================= home ======================= -->
+                    <ScrollViewer x:Name="HomeView" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollMode="Enabled">
+                        <StackPanel Padding="18,0,18,30" Spacing="28">
+                            <Border x:Name="HeroCard" Style="{StaticResource GlassPanelStyle}" CornerRadius="24"
+                                    MinHeight="210" SizeChanged="HeroCard_SizeChanged">
+                                <Grid>
+                                    <Border Background="{StaticResource HeroWashBrush}" CornerRadius="24"
+                                            IsHitTestVisible="False" />
+                                    <Grid Padding="22" ColumnSpacing="24">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="164" Height="164" CornerRadius="20"
+                                                Background="{StaticResource ArtFrameBrush}">
+                                            <Grid>
+                                                <!-- 占位垫在图片下面：加载中/失败时看到的是图标，不是空白 -->
+                                                <Border x:Name="HeroArtFallback" Background="{StaticResource ArtPlaceholderBrush}">
+                                                    <FontIcon Glyph="&#xE958;" FontSize="42"
+                                                              Foreground="{StaticResource TextTertiaryBrush}" />
+                                                </Border>
+                                                <Image x:Name="HeroArt" Stretch="UniformToFill"
+                                                       ImageFailed="ArtImage_Failed" />
+                                            </Grid>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="7"
+                                                    Margin="2,0,0,0">
+                                            <TextBlock x:Name="HeroKind" Text="此刻" Style="{StaticResource CaptionText}"
+                                                       Foreground="{StaticResource AccentBrush}" CharacterSpacing="100" />
+                                            <TextBlock x:Name="HeroTitle" Text="" Style="{StaticResource HeroTitle}"
+                                                       MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="HeroSub" Text="" Style="{StaticResource SubText}"
+                                                       FontSize="13" MaxLines="1" />
+                                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,12,0,0">
+                                                <Button x:Name="HeroPlay" Style="{StaticResource PrimaryButtonStyle}"
+                                                        Click="HeroPlay_Click" MinWidth="112">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <FontIcon x:Name="HeroPlayGlyph" Glyph="&#xE768;" FontSize="12" />
+                                                        <TextBlock x:Name="HeroPlayText" Text="播放" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource GhostButtonStyle}" Click="Radio_Click">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <FontIcon Glyph="&#xE93E;" FontSize="14" />
+                                                        <TextBlock Text="随意电台" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <StackPanel x:Name="HeroStats" Grid.Column="2" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                                                    Spacing="3">
+                                            <TextBlock x:Name="HeroStatA" Style="{StaticResource CaptionText}"
+                                                       HorizontalAlignment="Right" />
+                                            <TextBlock x:Name="HeroStatB" Style="{StaticResource CaptionText}"
+                                                       HorizontalAlignment="Right" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <StackPanel x:Name="RecentSection" Spacing="13" Visibility="Collapsed">
+                                <Grid>
+                                    <TextBlock Text="最近播放" Style="{StaticResource SectionTitle}" />
+                                    <Button Content="全部" HorizontalAlignment="Right" Style="{StaticResource LinkButtonStyle}"
+                                            Click="HistoryLink_Click" />
+                                </Grid>
+                                <ItemsControl x:Name="RecentCards">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <local:WrapPanel HorizontalSpacing="14" VerticalSpacing="14" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:Track">
+                                            <Button Style="{StaticResource CardButtonStyle}" Click="TrackCard_Click">
+                                                <StackPanel Width="138" Spacing="9">
+                                                    <Border Width="138" Height="138" CornerRadius="16" Background="{StaticResource ArtFrameBrush}">
+                                                        <Grid>
+                                                            <Border Background="{StaticResource ArtPlaceholderBrush}" />
+                                                            <Image Source="{x:Bind CoverImage}" Stretch="UniformToFill"
+                                                                   ImageFailed="CoverImage_Failed" />
+                                                            <Border x:Name="ph" Background="{StaticResource ArtPlaceholderBrush}"
+                                                                    Visibility="{x:Bind ArtPlaceholderVisible}">
+                                                                <FontIcon Glyph="&#xE8D6;" FontSize="28"
+                                                                          Foreground="{StaticResource TextTertiaryBrush}" />
+                                                            </Border>
+                                                        </Grid>
+                                                    </Border>
+                                                    <StackPanel Spacing="2">
+                                                        <TextBlock Text="{x:Bind TitleText}" Style="{StaticResource TitleText}" />
+                                                        <TextBlock Text="{x:Bind ArtistText}" Style="{StaticResource CaptionText}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <StackPanel x:Name="NewSection" Spacing="13" Visibility="Collapsed">
+                                <Grid>
+                                    <TextBlock Text="新入库" Style="{StaticResource SectionTitle}" />
+                                    <Button Content="全部" HorizontalAlignment="Right" Style="{StaticResource LinkButtonStyle}"
+                                            Click="SongsLink_Click" />
+                                </Grid>
+                                <ItemsControl x:Name="NewCards">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <local:WrapPanel HorizontalSpacing="14" VerticalSpacing="14" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:Track">
+                                            <Button Style="{StaticResource CardButtonStyle}" Click="TrackCard_Click">
+                                                <StackPanel Width="138" Spacing="9">
+                                                    <Border Width="138" Height="138" CornerRadius="16" Background="{StaticResource ArtFrameBrush}">
+                                                        <Grid>
+                                                            <Border Background="{StaticResource ArtPlaceholderBrush}" />
+                                                            <Image Source="{x:Bind CoverImage}" Stretch="UniformToFill"
+                                                                   ImageFailed="CoverImage_Failed" />
+                                                            <Border Background="{StaticResource ArtPlaceholderBrush}" Visibility="{x:Bind ArtPlaceholderVisible}">
+                                                                <FontIcon Glyph="&#xE8D6;" FontSize="28"
+                                                                          Foreground="{StaticResource TextTertiaryBrush}" />
+                                                            </Border>
+                                                        </Grid>
+                                                    </Border>
+                                                    <StackPanel Spacing="2">
+                                                        <TextBlock Text="{x:Bind TitleText}" Style="{StaticResource TitleText}" />
+                                                        <TextBlock Text="{x:Bind ArtistText}" Style="{StaticResource CaptionText}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <StackPanel x:Name="HomeAlbumsSection" Spacing="13" Visibility="Collapsed">
+                                <Grid>
+                                    <TextBlock Text="专辑" Style="{StaticResource SectionTitle}" />
+                                    <Button Content="全部" HorizontalAlignment="Right" Style="{StaticResource LinkButtonStyle}"
+                                            Click="AlbumsLink_Click" />
+                                </Grid>
+                                <ItemsRepeater x:Name="HomeAlbums">
+                                    <ItemsRepeater.Layout>
+                                        <UniformGridLayout MinItemWidth="172" MinItemHeight="228"
+                                                           ItemsStretch="Fill" MinRowSpacing="16"
+                                                           MinColumnSpacing="16" />
+                                    </ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="models:AlbumInfo">
+                                            <Button Style="{StaticResource CardButtonStyle}" Click="AlbumCard_Click">
+                                                <StackPanel Spacing="9">
+                                                    <Border Height="164" CornerRadius="16" Background="{StaticResource ArtFrameBrush}">
+                                                        <Grid>
+                                                            <Border Background="{StaticResource ArtPlaceholderBrush}" />
+                                                            <Image Source="{x:Bind CoverImage}" Stretch="UniformToFill"
+                                                                   ImageFailed="CoverImage_Failed" />
+                                                        </Grid>
+                                                    </Border>
+                                                    <StackPanel Spacing="2">
+                                                        <TextBlock Text="{x:Bind Album}" Style="{StaticResource TitleText}" />
+                                                        <TextBlock Text="{x:Bind Subtitle}" Style="{StaticResource CaptionText}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- ======================= tracks ======================= -->
+                    <Grid x:Name="TracksView" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid x:Name="DetailHero" Grid.Row="0" Visibility="Collapsed"
+                              Padding="10,8,22,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="DetailArtBorder" Width="132" Height="132" CornerRadius="20"
+                                    Background="{StaticResource ArtFrameBrush}" VerticalAlignment="Center">
+                                <Grid>
+                                    <Border Background="{StaticResource ArtPlaceholderBrush}">
+                                        <FontIcon Glyph="&#xE8D6;" FontSize="34"
+                                                  Foreground="{StaticResource TextTertiaryBrush}" />
+                                    </Border>
+                                    <Image x:Name="DetailArt" Stretch="UniformToFill"
+                                           ImageFailed="ArtImage_Failed" />
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="20,0,0,0" Spacing="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="DetailKicker" FontSize="10.5" FontWeight="SemiBold"
+                                           CharacterSpacing="140" Foreground="{StaticResource AccentBrush}" />
+                                <TextBlock x:Name="DetailTitle" FontSize="30" FontWeight="Bold" MaxLines="1"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                <TextBlock x:Name="DetailMeta" FontSize="12.5"
+                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,12,0,0">
+                                    <Button Style="{StaticResource PrimaryButtonStyle}" Width="96" Padding="16,0"
+                                            Click="PlayAll_Click">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE768;" FontSize="12" />
+                                            <TextBlock Text="播放" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource GhostButtonStyle}" Width="38" Padding="0"
+                                            Click="Shuffle_Click" ToolTipService.ToolTip="随机播放">
+                                        <FontIcon Glyph="&#xE8B1;" FontSize="14" />
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                        <Grid x:Name="TrackHeaderRow" Grid.Row="1" Height="32" Padding="10,0,22,0" Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="30" />
+                                <ColumnDefinition Width="40" />
+                                <ColumnDefinition Width="2.1*" />
+                                <ColumnDefinition Width="1.4*" />
+                                <ColumnDefinition Width="160" />
+                                <ColumnDefinition Width="64" />
+                                <ColumnDefinition Width="36" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="#" Style="{StaticResource CaptionText}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="标题" Style="{StaticResource CaptionText}"
+                                       VerticalAlignment="Center" Margin="12,0,0,0" />
+                            <TextBlock Grid.Column="3" Text="专辑" Style="{StaticResource CaptionText}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="4" Text="音质" Style="{StaticResource CaptionText}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="5" Text="时长" Style="{StaticResource CaptionText}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        </Grid>
+                        <Grid Grid.Row="2">
+                        <ListView x:Name="TrackList" SelectionMode="None"
+                                  IsItemClickEnabled="True" ItemClick="TrackList_ItemClick"
+                                  ItemContainerStyle="{StaticResource SongRowStyle}"
+                                  Padding="0,0,10,12"
+                                  ScrollViewer.HorizontalScrollMode="Disabled"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                  ScrollViewer.VerticalScrollMode="Enabled"
+                                  ScrollViewer.IsDeferredScrollingEnabled="False">
+                            <ListView.ItemContainerTransitions>
+                                <TransitionCollection />
+                            </ListView.ItemContainerTransitions>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="models:Track">
+                                    <Grid Height="56" Padding="10,0,12,0"
+                                          RightTapped="TrackRow_RightTapped">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="30" />
+                                            <ColumnDefinition Width="40" />
+                                            <ColumnDefinition Width="2.1*" />
+                                            <ColumnDefinition Width="1.4*" />
+                                            <ColumnDefinition Width="160" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="36" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.ColumnSpan="7" Margin="-10,0,-12,0" CornerRadius="9"
+                                                Background="{StaticResource RowPlayingBrush}"
+                                                Visibility="{x:Bind PlayingTintVisible, Mode=OneWay}" />
+                                        <Grid Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind NumberText}" Style="{StaticResource CaptionText}"
+                                                       Visibility="{x:Bind RowNumberVisible, Mode=OneWay}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="2" Height="14"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{x:Bind PlayingBadgeVisible, Mode=OneWay}">
+                                                <Rectangle Width="3" Height="6" RadiusX="1.5" RadiusY="1.5"
+                                                           Fill="{StaticResource AccentBrush}" VerticalAlignment="Bottom" />
+                                                <Rectangle Width="3" Height="12" RadiusX="1.5" RadiusY="1.5"
+                                                           Fill="{StaticResource AccentBrush}" VerticalAlignment="Bottom" />
+                                                <Rectangle Width="3" Height="8" RadiusX="1.5" RadiusY="1.5"
+                                                           Fill="{StaticResource AccentBrush}" VerticalAlignment="Bottom" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Border Grid.Column="1" Width="36" Height="36" CornerRadius="9"
+                                                Background="{StaticResource ArtFrameBrush}" VerticalAlignment="Center">
+                                            <Grid>
+                                                <Border Background="{StaticResource ArtPlaceholderBrush}" />
+                                                <Image Source="{x:Bind CoverImage}" Stretch="UniformToFill"
+                                                       Visibility="{x:Bind ArtVisible}"
+                                                       ImageFailed="CoverImage_Failed" />
+                                                <Border Background="{StaticResource ArtPlaceholderBrush}" Visibility="{x:Bind ArtPlaceholderVisible}">
+                                                    <FontIcon Glyph="&#xE8D6;" FontSize="14"
+                                                              Foreground="{StaticResource TextTertiaryBrush}" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3"
+                                                    Margin="12,0,12,0">
+                                            <TextBlock Text="{x:Bind TitleText}" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="{x:Bind ArtistText}" Style="{StaticResource SubText}"
+                                                       FontSize="11.5" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="3" Text="{x:Bind AlbumText}" Style="{StaticResource SubText}"
+                                                   VerticalAlignment="Center" Margin="0,0,12,0" />
+                                        <TextBlock Grid.Column="4" Text="{x:Bind QualityDetail}"
+                                                   Style="{StaticResource CaptionText}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="5" Text="{x:Bind DurationText}"
+                                                   Style="{StaticResource CaptionText}" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Right" />
+                                        <Button Grid.Column="6" Style="{StaticResource IconButtonStyle}"
+                                                Width="30" Height="30" FontSize="14"
+                                                Click="RowFavorite_Click" ToolTipService.ToolTip="喜欢">
+                                            <Grid>
+                                                <FontIcon Glyph="&#xE006;" FontSize="14"
+                                                          Foreground="{StaticResource TextTertiaryBrush}"
+                                                          Visibility="{x:Bind FavoriteOff, Mode=OneWay}" />
+                                                <FontIcon Glyph="&#xE00B;" FontSize="14"
+                                                          Foreground="{StaticResource AccentBrush}"
+                                                          Visibility="{x:Bind FavoriteOn, Mode=OneWay}" />
+                                            </Grid>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <!-- A–Z 字母轨：点字母直跳区块，滚动时右侧浮出当前字母 -->
+                        <Border x:Name="AzRailHost" Width="28" VerticalAlignment="Center"
+                                HorizontalAlignment="Right" Margin="0,8,11,8" Padding="0,8"
+                                CornerRadius="14" Background="{StaticResource SidebarPanelBrush}"
+                                BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
+                                Visibility="Collapsed">
+                            <ItemsControl x:Name="AzRail">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:AzLetter">
+                                        <Button Click="AzLetter_Click" Background="Transparent"
+                                                BorderThickness="0" Padding="0" Width="26" Height="18"
+                                                HorizontalContentAlignment="Stretch"
+                                                VerticalContentAlignment="Center">
+                                            <Grid>
+                                                <Border Width="2" Height="10" CornerRadius="1"
+                                                        Background="{StaticResource AccentBrush}"
+                                                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                        Visibility="{x:Bind ActiveVisible, Mode=OneWay}" />
+                                                <TextBlock Text="{x:Bind Letter}" FontSize="10"
+                                                           Opacity="{x:Bind Opacity}"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                        <Border x:Name="AzBubble" Width="62" Height="62" CornerRadius="18"
+                                Background="{StaticResource BubbleBrush}" BorderBrush="{StaticResource ControlBorderBrush}"
+                                BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Visibility="Collapsed" IsHitTestVisible="False">
+                            <TextBlock x:Name="AzBubbleText" FontSize="26" FontWeight="Bold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        </Grid>
+                        <StackPanel x:Name="TrackEmpty" Grid.Row="1" VerticalAlignment="Center"
+                                    HorizontalAlignment="Center" Spacing="10" Visibility="Collapsed">
+                            <FontIcon Glyph="&#xE8D6;" FontSize="38" Foreground="{StaticResource TextTertiaryBrush}" />
+                            <TextBlock x:Name="TrackEmptyText" Text="这里还没有歌曲" FontSize="14"
+                                       Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ======================= albums ======================= -->
+                    <GridView x:Name="AlbumGrid" Visibility="Collapsed" SelectionMode="None"
+                              IsItemClickEnabled="True" ItemClick="AlbumGrid_ItemClick"
+                              ItemContainerStyle="{StaticResource CardContainerStyle}"
+                              Padding="8,0,8,28"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="184" ItemHeight="242" />
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="models:AlbumInfo">
+                                <StackPanel Width="168" Spacing="9">
+                                    <Border Height="168" CornerRadius="16" Background="{StaticResource ArtFrameBrush}">
+                                        <Grid>
+                                            <Border Background="{StaticResource ArtPlaceholderBrush}" />
+                                            <Image Source="{x:Bind CoverImage}" Stretch="UniformToFill"
+                                                   ImageFailed="CoverImage_Failed" />
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{x:Bind Album}" Style="{StaticResource TitleText}" />
+                                        <TextBlock Text="{x:Bind Subtitle}" Style="{StaticResource CaptionText}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+
+                    <!-- ======================= artists ======================= -->
+                    <GridView x:Name="ArtistGrid" Visibility="Collapsed" SelectionMode="None"
+                              IsItemClickEnabled="True" ItemClick="ArtistGrid_ItemClick"
+                              ItemContainerStyle="{StaticResource CardContainerStyle}"
+                              Padding="8,0,8,28"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="184" ItemHeight="216" />
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="models:ArtistInfo">
+                                <StackPanel Width="168" Spacing="10">
+                                    <Border Width="104" Height="104" CornerRadius="52" HorizontalAlignment="Center"
+                                            Background="{StaticResource ArtFrameBrush}">
+                                        <Grid>
+                                            <Border Background="{StaticResource ArtPlaceholderBrush}" />
+                                            <Image Source="{x:Bind CoverImage}" Stretch="UniformToFill"
+                                                   ImageFailed="CoverImage_Failed" />
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{x:Bind Name}" Style="{StaticResource TitleText}"
+                                                   HorizontalAlignment="Center" />
+                                        <TextBlock Text="{x:Bind MetaText}" Style="{StaticResource CaptionText}"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+
+                    <!-- ======================= folders / genres ======================= -->
+                    <GridView x:Name="CategoryGrid" Visibility="Collapsed" SelectionMode="None"
+                              IsItemClickEnabled="True" ItemClick="CategoryGrid_ItemClick"
+                              ItemContainerStyle="{StaticResource CardContainerStyle}"
+                              Padding="8,0,8,28"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="184" ItemHeight="242" />
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="models:CategoryInfo">
+                                <StackPanel Width="168" Spacing="9">
+                                    <Border Height="168" CornerRadius="16" Background="{StaticResource ArtFrameBrush}"
+                                            BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1">
+                                        <Grid>
+                                            <Border Background="{StaticResource ArtPlaceholderBrush}" />
+                                            <Image Source="{x:Bind CoverImage}" Stretch="UniformToFill"
+                                                   ImageFailed="CoverImage_Failed" />
+                                            <!-- 统一压暗：文字色块封面很饱和，压到与整页玻璃背景同一明度区间 -->
+                                            <Border Background="#3A090C11" />
+                                            <Border Width="34" Height="34" CornerRadius="10"
+                                                    Background="#5A0B0E14" HorizontalAlignment="Left"
+                                                    VerticalAlignment="Bottom" Margin="10">
+                                                <FontIcon Glyph="{x:Bind Icon}" FontSize="15"
+                                                          Foreground="#D8FFFFFF" />
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{x:Bind Title}" Style="{StaticResource TitleText}" />
+                                        <TextBlock Text="{x:Bind Subtitle}" Style="{StaticResource CaptionText}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+
+                    <!-- 搜索无结果/空库：明确的空白态，而不是一整片无解释的空白 -->
+                    <StackPanel x:Name="AlbumsEmpty" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="10" Visibility="Collapsed" IsHitTestVisible="False">
+                        <FontIcon Glyph="&#xE8D6;" FontSize="38" Foreground="{StaticResource TextTertiaryBrush}" />
+                        <TextBlock x:Name="AlbumsEmptyText" Text="这里还没有专辑" FontSize="14"
+                                   Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel x:Name="ArtistsEmpty" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="10" Visibility="Collapsed" IsHitTestVisible="False">
+                        <FontIcon Glyph="&#xE8D6;" FontSize="38" Foreground="{StaticResource TextTertiaryBrush}" />
+                        <TextBlock x:Name="ArtistsEmptyText" Text="这里还没有艺术家" FontSize="14"
+                                   Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel x:Name="CategoriesEmpty" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Spacing="10" Visibility="Collapsed" IsHitTestVisible="False">
+                        <FontIcon Glyph="&#xE8D6;" FontSize="38" Foreground="{StaticResource TextTertiaryBrush}" />
+                        <TextBlock x:Name="CategoriesEmptyText" Text="这里还没有内容" FontSize="14"
+                                   Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- ======================= settings ======================= -->
+                    <ScrollViewer x:Name="SettingsView" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollMode="Enabled" SizeChanged="SettingsView_SizeChanged">
+                        <Grid x:Name="SettingsColumns" Padding="18,0,18,30" HorizontalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition x:Name="SettingsGapColumn" Width="0" />
+                                <ColumnDefinition x:Name="SettingsRightColumn" Width="0" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel x:Name="SettingsColLeft" Spacing="24">
+
+                            <!-- 外观 -->
+                            <StackPanel x:Name="SecAppearance" Spacing="10">
+                            <TextBlock Text="外观" Style="{StaticResource SettingsSectionTitle}" />
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel Spacing="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="主题" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="跟随系统时随 Windows 明暗自动切换" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="SetTheme" Grid.Column="1" Width="150" Height="34" FontSize="12.5"
+                                                  CornerRadius="10" SelectionChanged="SetTheme_Changed">
+                                            <ComboBoxItem Content="跟随系统" Tag="system" />
+                                            <ComboBoxItem Content="深色" Tag="dark" />
+                                            <ComboBoxItem Content="浅色" Tag="light" />
+                                        </ComboBox>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="关闭时收到托盘" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="关掉开关则点关闭直接退出" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetCloseToTray" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetCloseToTray_Toggled" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            </StackPanel>
+
+                            <!-- 播放 -->
+                            <StackPanel x:Name="SecPlayback" Spacing="10">
+                            <TextBlock Text="播放" Style="{StaticResource SettingsSectionTitle}" />
+                            <Border x:Name="SettingsPlayCard" Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel Spacing="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="启动时恢复播放" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="打开应用接着上次的歌与进度" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetResume" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetResume_Toggled" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="默认循环模式" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="新队列的播放顺序" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="SetPlayMode" Grid.Column="1" Width="150" Height="34" FontSize="12.5"
+                                                  CornerRadius="10" SelectionChanged="SetPlayMode_Changed">
+                                            <ComboBoxItem Content="列表循环" Tag="list_loop" />
+                                            <ComboBoxItem Content="单曲循环" Tag="one_loop" />
+                                            <ComboBoxItem Content="随机播放" Tag="shuffle" />
+                                            <ComboBoxItem Content="顺序播放" Tag="normal" />
+                                        </ComboBox>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="播放速度" Style="{StaticResource TitleText}" />
+                                            <TextBlock x:Name="SetRateText" Text="1.00×" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <Slider x:Name="SetRate" Grid.Column="1" Width="200" Style="{StaticResource SettingSliderStyle}"
+                                                Minimum="0.5" Maximum="2" StepFrequency="0.05" ValueChanged="SetRate_Changed" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            </StackPanel>
+
+                            <!-- 音质与输出 -->
+                            <StackPanel x:Name="SecAudio" Spacing="10">
+                            <TextBlock Text="音质与输出" Style="{StaticResource SettingsSectionTitle}" />
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel Spacing="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="输出设备" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="WASAPI 端点 · 立即切换" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="SetDevice" Grid.Column="1" Width="260" Height="34" FontSize="12.5"
+                                                  CornerRadius="10" SelectionChanged="SetDevice_Changed" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="独占模式" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="绕过系统混音器直连声卡 · 锁住整机声音 · 立即切换" Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetExclusive" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetExclusive_Toggled" />
+                                    </Grid>
+                                    <Grid x:Name="SetTargetRateRow">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="目标采样率" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="仅独占 · 固定档切歌无缝；跟随源＝逐位直通" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="SetTargetRate" Grid.Column="1" Width="150" Height="34" FontSize="12.5"
+                                                  CornerRadius="10" SelectionChanged="SetTargetRate_Changed">
+                                            <ComboBoxItem Content="跟随设备" Tag="0" />
+                                            <ComboBoxItem Content="跟随源（逐位）" Tag="-1" />
+                                            <ComboBoxItem Content="44.1 kHz" Tag="44100" />
+                                            <ComboBoxItem Content="48 kHz" Tag="48000" />
+                                            <ComboBoxItem Content="88.2 kHz" Tag="88200" />
+                                            <ComboBoxItem Content="96 kHz" Tag="96000" />
+                                            <ComboBoxItem Content="176.4 kHz" Tag="176400" />
+                                            <ComboBoxItem Content="192 kHz" Tag="192000" />
+                                        </ComboBox>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="抖动 (TPDF)" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="24 位源落 16 位容器时降低量化失真 · 下一首生效" Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetDither" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetDither_Toggled" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="响度均衡" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="把峰值归一到 0.95 的软 AGC · 即时生效" Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetLoudness" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetLoudness_Toggled" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="左右声道平衡" Style="{StaticResource TitleText}" />
+                                            <TextBlock x:Name="SetBalanceText" Text="居中" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <Slider x:Name="SetBalance" Grid.Column="1" Width="200" Style="{StaticResource SettingSliderStyle}"
+                                                Minimum="-1" Maximum="1" StepFrequency="0.05" ValueChanged="SetBalance_Changed" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="淡入" Style="{StaticResource TitleText}" />
+                                            <TextBlock x:Name="SetFadeText" Text="0.0 秒" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <Slider x:Name="SetFade" Grid.Column="1" Width="200" Style="{StaticResource SettingSliderStyle}"
+                                                Minimum="0" Maximum="3" StepFrequency="0.1" ValueChanged="SetFade_Changed" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="虚拟扬声器" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="耳机交叉馈电，模拟前方音箱 · 即时生效" Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetSpeakers" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetSpeakers_Toggled" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            </StackPanel>
+
+                            <!-- 均衡器 -->
+                            <StackPanel x:Name="SecEq" Spacing="10">
+                            <TextBlock Text="均衡器" Style="{StaticResource SettingsSectionTitle}" />
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel Spacing="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="十段均衡" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="±12 dB · 即时生效" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="SetEqPreset" Grid.Column="1" Width="130" Height="34" FontSize="12.5" Margin="0,0,12,0"
+                                                  CornerRadius="10" SelectionChanged="SetEqPreset_Changed">
+                                            <ComboBoxItem Content="平直" Tag="flat" />
+                                            <ComboBoxItem Content="摇滚" Tag="rock" />
+                                            <ComboBoxItem Content="流行" Tag="pop" />
+                                            <ComboBoxItem Content="爵士" Tag="jazz" />
+                                            <ComboBoxItem Content="古典" Tag="classical" />
+                                            <ComboBoxItem Content="舞曲" Tag="dance" />
+                                            <ComboBoxItem Content="人声" Tag="vocal" />
+                                            <ComboBoxItem Content="低音增强" Tag="bass" />
+                                            <ComboBoxItem Content="高音增强" Tag="treble" />
+                                            <ComboBoxItem Content="自定义" Tag="custom" />
+                                        </ComboBox>
+                                        <ToggleSwitch x:Name="SetEqEnabled" Grid.Column="2" Style="{StaticResource SettingToggleStyle}" Toggled="SetEqEnabled_Toggled" />
+                                    </Grid>
+                                    <Grid x:Name="EqBands" ColumnSpacing="6" />
+                                </StackPanel>
+                            </Border>
+                            </StackPanel>
+
+                            <!-- 歌词 -->
+                            <StackPanel x:Name="SecLyrics" Spacing="10">
+                            <TextBlock Text="歌词" Style="{StaticResource SettingsSectionTitle}" />
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel Spacing="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="歌词字号" Style="{StaticResource TitleText}" />
+                                            <TextBlock x:Name="SetLyricSizeText" Text="100%" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <Slider x:Name="SetLyricSize" Grid.Column="1" Width="200" Style="{StaticResource SettingSliderStyle}"
+                                                StepFrequency="5" ValueChanged="SetLyricSize_Changed" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="显示翻译" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="有双语歌词时显示译文" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetTranslation" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetTranslation_Toggled" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="播放条显示歌词" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="第二行跑当前这句，而不是艺人 · 专辑" Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetPlaybarLyricToggle" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetPlaybarLyric_Toggled" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="桌面歌词" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="悬浮在桌面最上层，显示当前这句" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetDesktopLyric" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetDesktopLyric_Toggled" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="桌面歌词置顶" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="关掉后会被其他窗口盖住" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetDesktopLyricTop" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetDesktopLyricTop_Toggled" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            </StackPanel>
+
+                            <!-- 音乐库 -->
+                            <StackPanel x:Name="SecLibrary" Spacing="10">
+                            <TextBlock Text="音乐库" Style="{StaticResource SettingsSectionTitle}" />
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel Spacing="12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="文件夹" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="扫描本地音乐目录" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Style="{StaticResource GhostButtonStyle}" Height="34" Padding="14,0"
+                                                Click="AddLibrary_Click">
+                                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                                <FontIcon Glyph="&#xE710;" FontSize="11" />
+                                                <TextBlock Text="添加文件夹" FontSize="12.5" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                    <StackPanel x:Name="LibraryList" Spacing="8" />
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="维护" Style="{StaticResource TitleText}" />
+                                            <TextBlock x:Name="ScanStatusText" Text="扫描空闲" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Style="{StaticResource GhostButtonStyle}" Height="32" Padding="12,0"
+                                                Click="RescanAll_Click" ToolTipService.ToolTip="重新扫描全部音乐文件夹">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE72C;" FontSize="11" />
+                                                <TextBlock Text="全部重扫" FontSize="12.5" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="2" Style="{StaticResource GhostButtonStyle}" Height="32" Padding="12,0"
+                                                Click="PurgeMissing_Click" ToolTipService.ToolTip="把磁盘上已不存在的文件从音乐库移除">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE74D;" FontSize="11" />
+                                                <TextBlock Text="清理失效" FontSize="12.5" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="包含不支持的格式" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="扫描时也列入无法播放的文件" Style="{StaticResource CaptionText}" />
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="SetUnsupported" Grid.Column="1" Style="{StaticResource SettingToggleStyle}" Toggled="SetUnsupported_Toggled" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            </StackPanel>
+
+                            <!-- 排除的文件夹 -->
+                            <StackPanel x:Name="SecExcludes" Spacing="10">
+                            <TextBlock Text="排除的文件夹" Style="{StaticResource SettingsSectionTitle}" />
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel Spacing="12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="不扫描这些目录" Style="{StaticResource TitleText}" />
+                                            <TextBlock Text="目录及其子目录都会被跳过，重新扫描后生效" Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Style="{StaticResource GhostButtonStyle}" Height="34" Padding="14,0"
+                                                Click="AddExclude_Click">
+                                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                                <FontIcon Glyph="&#xE710;" FontSize="11" />
+                                                <TextBlock Text="添加排除" FontSize="12.5" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                    <StackPanel x:Name="ExcludeList" Spacing="8" />
+                                </StackPanel>
+                            </Border>
+                            </StackPanel>
+
+                            <!-- 关于 -->
+                            <StackPanel x:Name="SecAbout" Spacing="10">
+                            <TextBlock Text="关于" Style="{StaticResource SettingsSectionTitle}" />
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock x:Name="AboutTitle" Text="LuHui音乐播放器" Style="{StaticResource TitleText}" FontSize="15" />
+                                    <TextBlock x:Name="AboutVersion" Text="" Style="{StaticResource SubText}" />
+                                    <TextBlock x:Name="AboutStats" Text="" Style="{StaticResource CaptionText}" />
+                                    <TextBlock x:Name="AboutEngine" Text="" Style="{StaticResource CaptionText}" />
+                                </StackPanel>
+                            </Border>
+                            </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="SettingsColRight" Grid.Column="2" Spacing="24" Visibility="Collapsed" />
+                        </Grid>
+                    </ScrollViewer>
+
+                    <!-- ======================= placeholder ======================= -->
+                    <StackPanel x:Name="PlaceholderView" Visibility="Collapsed" VerticalAlignment="Center"
+                                HorizontalAlignment="Center" Spacing="12">
+                        <FontIcon x:Name="PlaceholderGlyph" Glyph="&#xE8FD;" FontSize="36"
+                                  Foreground="{StaticResource TextTertiaryBrush}" />
+                        <TextBlock x:Name="PlaceholderText" Text="正在准备" FontSize="14"
+                                   Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- ======================= lyrics ======================= -->
+                <Grid x:Name="LyricsView" Grid.RowSpan="2" Visibility="Collapsed" Canvas.ZIndex="20">
+                    <!-- 歌词是阅读层，底层列表再亮也不许透过来：底色全不透明，氛围靠上面的暖色 wash。 -->
+                    <Border x:Name="LyricsSurface" Background="{StaticResource LyricsSurfaceBrush}">
+                        <Grid>
+                            <Border IsHitTestVisible="False" Background="{StaticResource LyricWashBrush}" />
+                            <Grid Padding="30,12,30,18">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="13" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource IconButtonStyle}" Width="36" Height="36"
+                                                Click="LyricsClose_Click" ToolTipService.ToolTip="关闭歌词">
+                                            <FontIcon Glyph="&#xE72B;" FontSize="15" />
+                                        </Button>
+                                        <Border Width="42" Height="42" CornerRadius="12" Background="{StaticResource ArtFrameBrush}">
+                                            <Grid>
+                                                <Border Background="{StaticResource ArtPlaceholderBrush}">
+                                                    <FontIcon Glyph="&#xE8D6;" FontSize="17"
+                                                              Foreground="{StaticResource TextTertiaryBrush}" />
+                                                </Border>
+                                                <Image x:Name="LyricsArt" Stretch="UniformToFill"
+                                                       ImageFailed="ArtImage_Failed" />
+                                            </Grid>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock x:Name="LyricsTitle" Text="未在播放" FontSize="15.5"
+                                                       FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"
+                                                       MaxLines="1" TextTrimming="CharacterEllipsis" MaxWidth="420" />
+                                            <TextBlock x:Name="LyricsArtist" Text="" Style="{StaticResource CaptionText}"
+                                                       FontSize="11.5" MaxWidth="420" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"
+                                                VerticalAlignment="Center" Spacing="8">
+                                        <Button x:Name="LyricsAttachButton" Style="{StaticResource GhostButtonStyle}"
+                                                Height="34" Padding="12,0" Click="LyricsAttach_Click"
+                                                ToolTipService.ToolTip="挂载本地歌词文件（.lrc / .txt）">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE8E5;" FontSize="12" />
+                                                <TextBlock x:Name="LyricsAttachText" Text="挂载" FontSize="12" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="LyricsEditButton" Style="{StaticResource GhostButtonStyle}"
+                                                Height="34" Padding="12,0" Click="LyricsEdit_Click"
+                                                ToolTipService.ToolTip="编辑并保存歌词">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE70F;" FontSize="12" />
+                                                <TextBlock x:Name="LyricsEditText" Text="编辑" FontSize="12" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="LyricsTransButton" Style="{StaticResource GhostButtonStyle}"
+                                                Height="34" Padding="12,0" Click="LyricsTrans_Click"
+                                                ToolTipService.ToolTip="显示 / 隐藏歌词翻译">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE774;" FontSize="12" />
+                                                <TextBlock x:Name="LyricsTransText" Text="翻译" FontSize="12" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Border Height="34" CornerRadius="11" Background="{StaticResource ControlFillBrush}"
+                                                BorderBrush="{StaticResource ControlStrokeBrush}" BorderThickness="1"
+                                                Padding="2,0">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Button Style="{StaticResource IconButtonStyle}" Width="26" Height="26"
+                                                        Click="LyricOffsetMinus_Click" ToolTipService.ToolTip="歌词提前 0.1 秒">
+                                                    <FontIcon Glyph="&#xE738;" FontSize="10" />
+                                                </Button>
+                                                <TextBlock x:Name="LyricOffsetText" Text="0.0s" Width="42"
+                                                           TextAlignment="Center" FontSize="11"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           VerticalAlignment="Center" />
+                                                <Button Style="{StaticResource IconButtonStyle}" Width="26" Height="26"
+                                                        Click="LyricOffsetPlus_Click" ToolTipService.ToolTip="歌词延后 0.1 秒">
+                                                    <FontIcon Glyph="&#xE710;" FontSize="10" />
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                                <Grid Grid.Row="1">
+                                    <ListView x:Name="LyricsList" SelectionMode="None" IsItemClickEnabled="True"
+                                              ItemClick="LyricsList_ItemClick"
+                                              ItemContainerStyle="{StaticResource LyricRowStyle}"
+                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                              ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                                              ScrollViewer.VerticalScrollMode="Enabled"
+                                              ScrollViewer.IsDeferredScrollingEnabled="False">
+                                        <ListView.Header>
+                                            <Border Height="132" Background="Transparent" />
+                                        </ListView.Header>
+                                        <ListView.Footer>
+                                            <Border Height="176" Background="Transparent" />
+                                        </ListView.Footer>
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="models:LyricLine">
+                                                <Grid MaxWidth="780" HorizontalAlignment="Center" Padding="0,9">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="18" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Width="3" Height="16" CornerRadius="1.5"
+                                                            Background="{StaticResource AccentBrush}"
+                                                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                            Margin="0,1,0,0"
+                                                            Visibility="{x:Bind ActiveVisible, Mode=OneWay}" />
+                                                    <StackPanel Grid.Column="1" Spacing="4">
+                                                        <TextBlock Text="{x:Bind Text}" FontSize="{x:Bind TextSize}"
+                                                                   Foreground="{x:Bind TextBrush, Mode=OneWay}"
+                                                                   Opacity="{x:Bind TextOpacity, Mode=OneWay}"
+                                                                   TextWrapping="Wrap" IsTextSelectionEnabled="False" />
+                                                        <TextBlock Text="{x:Bind Trans}" FontSize="{x:Bind TransSize}"
+                                                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                                                   Opacity="{x:Bind TransOpacity, Mode=OneWay}"
+                                                                   TextWrapping="Wrap" IsTextSelectionEnabled="False"
+                                                                   Visibility="{x:Bind TransVisible, Mode=OneWay}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                    <StackPanel x:Name="LyricsEmpty" HorizontalAlignment="Center"
+                                                VerticalAlignment="Center" Spacing="10" Visibility="Collapsed">
+                                        <FontIcon Glyph="&#xE8AC;" FontSize="34"
+                                                  Foreground="{StaticResource TextTertiaryBrush}" />
+                                        <TextBlock Text="这首歌还没有歌词" FontSize="14"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="LyricsEmptyHint"
+                                                   Text="把同名 .lrc 放在歌曲旁边，重启扫描后会自动挂载"
+                                                   FontSize="11.5" Foreground="{StaticResource TextTertiaryBrush}"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                    <ProgressRing x:Name="LyricsRing" Width="24" Height="24" IsActive="False"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Foreground="{StaticResource AccentBrush}" />
+                                </Grid>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- boot overlay -->
+                <Grid x:Name="BootOverlay" Grid.RowSpan="2" Background="{StaticResource BootOverlayBrush}" Visibility="Visible">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="18">
+                        <Border Width="78" Height="78" CornerRadius="24" HorizontalAlignment="Center">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#F7B98A" Offset="0" />
+                                    <GradientStop Color="#D97B4E" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <FontIcon Glyph="&#xE8D6;" FontSize="34" Foreground="#201208" />
+                        </Border>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="LuHui音乐播放器" FontSize="22" FontWeight="Bold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center" />
+                            <TextBlock Text="LUHUI MUSIC PLAYER" FontSize="10" CharacterSpacing="200"
+                                       Foreground="{StaticResource TextTertiaryBrush}" HorizontalAlignment="Center" />
+                        </StackPanel>
+                        <ProgressRing x:Name="BootRing" IsActive="True" Width="26" Height="26"
+                                      Foreground="{StaticResource AccentBrush}" />
+                        <TextBlock x:Name="BootStatus" Text="正在启动音频服务…" Style="{StaticResource SubText}"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock x:Name="BootError" Text="" Foreground="{StaticResource DangerBrush}"
+                                   FontSize="12" TextWrapping="Wrap" MaxWidth="560"
+                                   HorizontalAlignment="Center" TextAlignment="Center" Visibility="Collapsed" />
+                        <Button x:Name="OpenLogButton" Content="打开日志" Style="{StaticResource GhostButtonStyle}"
+                                HorizontalAlignment="Center" Click="OpenLog_Click" Visibility="Collapsed" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- ======================= player bar ======================= -->
+            <Border Grid.Row="2" Grid.ColumnSpan="2" Style="{StaticResource GlassPanelStyle}" CornerRadius="22"
+                    Margin="0,10,0,0" Height="86">
+                <Grid Padding="16,0,16,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.05*" />
+                        <ColumnDefinition Width="1.5*" />
+                        <ColumnDefinition Width="1.05*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- now playing -->
+                    <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="54" Height="54" CornerRadius="14" Background="{StaticResource ArtFrameBrush}">
+                            <Grid>
+                                <Border x:Name="NowArtFallback" Background="{StaticResource ArtPlaceholderBrush}">
+                                    <FontIcon Glyph="&#xE8D6;" FontSize="22"
+                                              Foreground="{StaticResource TextTertiaryBrush}" />
+                                </Border>
+                                <Image x:Name="NowArt" Stretch="UniformToFill"
+                                       ImageFailed="ArtImage_Failed" />
+                            </Grid>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="13,0,8,0" Spacing="3">
+                            <TextBlock x:Name="NowTitle" Text="未在播放" Style="{StaticResource TitleText}"
+                                       FontSize="13" />
+                            <TextBlock x:Name="NowArtist" Text="选一首开始" Style="{StaticResource CaptionText}"
+                                       FontSize="11.5" />
+                        </StackPanel>
+                        <Button Grid.Column="2" x:Name="NowFavorite" Style="{StaticResource IconButtonStyle}"
+                                Width="32" Height="32" Click="NowFavorite_Click" ToolTipService.ToolTip="喜欢">
+                            <FontIcon x:Name="NowFavoriteGlyph" Glyph="&#xE006;" FontSize="15"
+                                      Foreground="{StaticResource TextTertiaryBrush}" />
+                        </Button>
+                    </Grid>
+
+                    <!-- transport -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
+                            <Button x:Name="ShuffleToggle" Style="{StaticResource IconButtonStyle}" Width="34" Height="34"
+                                    FontSize="15" Click="ShuffleToggle_Click" ToolTipService.ToolTip="随机播放">
+                                <FontIcon Glyph="&#xE8B1;" FontSize="15" />
+                            </Button>
+                            <Button Style="{StaticResource IconButtonStyle}" Width="38" Height="38" FontSize="18"
+                                    Click="Prev_Click" ToolTipService.ToolTip="上一首">
+                                <FontIcon Glyph="&#xE892;" FontSize="18" />
+                            </Button>
+                            <Button x:Name="PlayButton" Width="46" Height="46" CornerRadius="23"
+                                    Background="{StaticResource PlayButtonBrush}" Foreground="{StaticResource PlayButtonFgBrush}" BorderThickness="0"
+                                    Click="PlayPause_Click" ToolTipService.ToolTip="播放 / 暂停">
+                                <FontIcon x:Name="PlayGlyph" Glyph="&#xE768;" FontSize="18" Foreground="{StaticResource PlayButtonFgBrush}" />
+                            </Button>
+                            <Button Style="{StaticResource IconButtonStyle}" Width="38" Height="38" FontSize="18"
+                                    Click="Next_Click" ToolTipService.ToolTip="下一首">
+                                <FontIcon Glyph="&#xE893;" FontSize="18" />
+                            </Button>
+                            <Button x:Name="RepeatToggle" Style="{StaticResource IconButtonStyle}" Width="34" Height="34"
+                                    FontSize="15" Click="RepeatToggle_Click" ToolTipService.ToolTip="循环模式">
+                                <FontIcon x:Name="RepeatGlyph" Glyph="&#xE8EE;" FontSize="15" />
+                            </Button>
+                        </StackPanel>
+                        <Grid ColumnSpacing="10" Height="24">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="44" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="TimeNow" Text="0:00" Style="{StaticResource CaptionText}"
+                                       FontSize="10.5" VerticalAlignment="Center" TextAlignment="Right" />
+                            <Slider x:Name="SeekSlider" Grid.Column="1" Style="{StaticResource SeekSliderStyle}"
+                                    Minimum="0" Maximum="1" Value="0" ValueChanged="SeekSlider_ValueChanged" />
+                            <TextBlock x:Name="TimeTotal" Grid.Column="2" Text="0:00" Style="{StaticResource CaptionText}"
+                                       FontSize="10.5" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- right controls：质量徽标占剩余宽度并省略，窄窗口不会整簇溢出被硬裁 -->
+                    <Grid Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                          ColumnSpacing="2" Margin="6,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="QualityBadge" Grid.Column="0" Text="" Style="{StaticResource CaptionText}"
+                                   VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Button x:Name="VolumeButton" Grid.Column="1" Style="{StaticResource IconButtonStyle}" Width="32" Height="32"
+                                Click="Mute_Click" ToolTipService.ToolTip="静音">
+                            <FontIcon x:Name="VolumeGlyph" Glyph="&#xE767;" FontSize="15" />
+                        </Button>
+                        <Slider x:Name="VolumeSlider" Grid.Column="2" Width="86" Minimum="0" Maximum="1" Value="0.8"
+                                VerticalAlignment="Center" ValueChanged="VolumeSlider_ValueChanged"
+                                IsThumbToolTipEnabled="False" />
+                        <Button x:Name="QueueButton" Grid.Column="3" Style="{StaticResource IconButtonStyle}" Width="34" Height="34"
+                                ToolTipService.ToolTip="播放队列">
+                            <Button.Flyout>
+                                <Flyout x:Name="QueueFlyout" Placement="TopEdgeAlignedRight">
+                                    <Flyout.FlyoutPresenterStyle>
+                                        <Style TargetType="FlyoutPresenter">
+                                            <Setter Property="Background" Value="{StaticResource GlassRaisedBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource HairlineStrongBrush}" />
+                                            <Setter Property="BorderThickness" Value="1" />
+                                            <Setter Property="CornerRadius" Value="16" />
+                                            <Setter Property="Padding" Value="16,14" />
+                                            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+                                            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+                                        </Style>
+                                    </Flyout.FlyoutPresenterStyle>
+                                    <Grid x:Name="QueuePanel" Width="352" Height="404" RowSpacing="6">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                        </Grid.RowDefinitions>
+                                        <Grid Margin="4,2,4,4">
+                                            <TextBlock Text="播放队列" Style="{StaticResource SectionTitle}"
+                                                       VerticalAlignment="Center" />
+                                            <StackPanel Orientation="Horizontal" Spacing="8"
+                                                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <TextBlock x:Name="QueueCount" VerticalAlignment="Center"
+                                                           Style="{StaticResource CaptionText}" />
+                                                <Button x:Name="QueueClearButton" Style="{StaticResource IconButtonStyle}"
+                                                        Width="26" Height="26" Click="QueueClear_Click"
+                                                        ToolTipService.ToolTip="清空队列（保留当前曲目）">
+                                                    <FontIcon Glyph="&#xE74D;" FontSize="11" />
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                        <ListView x:Name="QueueList" Grid.Row="1" SelectionMode="None"
+                                                  IsItemClickEnabled="True" ItemClick="QueueList_ItemClick"
+                                                  ItemContainerStyle="{StaticResource SongRowStyle}">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="models:Track">
+                                                    <Grid Height="44" ColumnSpacing="8" Padding="6,0"
+                                                          RightTapped="QueueRow_RightTapped">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="14" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Border Grid.ColumnSpan="3" Margin="-6,0" CornerRadius="8"
+                                                                Background="{StaticResource RowPlayingBrush}"
+                                                                Visibility="{x:Bind PlayingTintVisible, Mode=OneWay}" />
+                                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="1.5" Height="12"
+                                                                    VerticalAlignment="Center"
+                                                                    Visibility="{x:Bind PlayingBadgeVisible, Mode=OneWay}">
+                                                            <Rectangle Width="2.5" Height="5" RadiusX="1.25" RadiusY="1.25"
+                                                                       Fill="{StaticResource AccentBrush}" VerticalAlignment="Bottom" />
+                                                            <Rectangle Width="2.5" Height="11" RadiusX="1.25" RadiusY="1.25"
+                                                                       Fill="{StaticResource AccentBrush}" VerticalAlignment="Bottom" />
+                                                            <Rectangle Width="2.5" Height="7" RadiusX="1.25" RadiusY="1.25"
+                                                                       Fill="{StaticResource AccentBrush}" VerticalAlignment="Bottom" />
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                                            <TextBlock Text="{x:Bind TitleText}" Style="{StaticResource TitleText}"
+                                                                       FontSize="12.5" />
+                                                            <TextBlock Text="{x:Bind ArtistText}" Style="{StaticResource CaptionText}" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="2" Text="{x:Bind DurationText}"
+                                                                   Style="{StaticResource CaptionText}" VerticalAlignment="Center" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                        <TextBlock x:Name="QueueEmpty" Grid.Row="1" Text="队列是空的"
+                                                   FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Visibility="Collapsed" IsHitTestVisible="False" />
+                                    </Grid>
+                                </Flyout>
+                            </Button.Flyout>
+                            <FontIcon Glyph="&#xE8FD;" FontSize="15" />
+                        </Button>
+                        <Button x:Name="SleepTimerButton" Grid.Column="4" Style="{StaticResource IconButtonStyle}" Width="34" Height="34"
+                                ToolTipService.ToolTip="定时关闭">
+                            <Button.Flyout>
+                                <MenuFlyout x:Name="SleepMenu" Placement="TopEdgeAlignedRight">
+                                    <MenuFlyoutItem Text="15 分钟后暂停" Tag="15" Click="SleepTimer_Click" />
+                                    <MenuFlyoutItem Text="30 分钟后暂停" Tag="30" Click="SleepTimer_Click" />
+                                    <MenuFlyoutItem Text="45 分钟后暂停" Tag="45" Click="SleepTimer_Click" />
+                                    <MenuFlyoutItem Text="60 分钟后暂停" Tag="60" Click="SleepTimer_Click" />
+                                    <MenuFlyoutItem Text="90 分钟后暂停" Tag="90" Click="SleepTimer_Click" />
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem Text="播完当前曲目后暂停" Tag="track" Click="SleepTimer_Click" />
+                                    <MenuFlyoutSeparator x:Name="SleepCancelSep" Visibility="Collapsed" />
+                                    <MenuFlyoutItem x:Name="SleepCancelItem" Text="取消定时" Click="SleepCancel_Click"
+                                                    Visibility="Collapsed" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                            <FontIcon Glyph="&#xE121;" FontSize="15" />
+                        </Button>
+                        <Button x:Name="LyricsButton" Grid.Column="5" Style="{StaticResource IconButtonStyle}" Width="34" Height="34"
+                                Click="Lyrics_Click" ToolTipService.ToolTip="歌词">
+                            <FontIcon Glyph="&#xE8AC;" FontSize="15" />
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- toast -->
+        <Border x:Name="ToastPanel" Background="{StaticResource ToastBrush}" BorderBrush="{StaticResource HairlineStrongBrush}"
+                BorderThickness="1" CornerRadius="12" Padding="16,9" MaxWidth="640"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,110"
+                Opacity="0" Visibility="Collapsed" IsHitTestVisible="False">
+            <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                <TextBlock x:Name="ToastText" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12.5"
+                           TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button x:Name="ToastAction" Visibility="Collapsed" Style="{StaticResource GhostButtonStyle}"
+                        Height="28" Padding="12,0" FontSize="12" Foreground="{StaticResource AccentBrush}"
+                        BorderBrush="{StaticResource AccentSoftBrush}" Click="ToastAction_Click" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

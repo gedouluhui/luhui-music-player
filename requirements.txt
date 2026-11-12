@@ -1,0 +1,8 @@
+# LuHui音乐播放器 — 本地音频服务依赖（Windows）
+# Python 3.10+；开发机为 3.12.3
+numpy>=1.26
+scipy>=1.11
+mutagen>=1.47
+Pillow>=9.5
+PyAudioWPatch>=0.2.12
+imageio-ffmpeg>=0.5

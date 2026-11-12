@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>桌面歌词</title>
+<!-- 桌面歌词置顶小窗：由 sp/app.py 的第二个 QWebEngineView 装载（/mini.html）。
+     这个页面自己没有任何「播放进度」的真值来源：主窗口的 rAF 在窗口被遮挡时会被
+     Chromium 停掉（那是 app.js 里写过的实测结论），所以进度必须由服务端给
+     （GET /api/playback：主窗口每秒报一次，服务端按 rate 外推），
+     这一页只负责「按墙钟把这一行显示出来」。 -->
+<style>
+  :root {
+    --ink: #f4f6fa;
+    --ink-dim: rgba(244, 246, 250, .58);
+    --pill: rgba(16, 19, 26, .62);
+    --edge: rgba(255, 255, 255, .14);
+    --scale: 1;
+    --accent: #7cc4ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; }
+  body {
+    font-family: "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    cursor: default;
+  }
+  /* 整块就是一个可拖的「条」：拖由 Qt 侧做（frameless 窗口自己 move），页面只管 hover。 */
+  .mini {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 10px 14px;
+  }
+  .line {
+    max-width: 100%;
+    padding: 7px 16px;
+    border-radius: 999px;
+    /* iOS 哑面那条：178° 单调明度斜坡 + 1px 上沿补光 + 中性双层阴影，不加左上白斑。 */
+    background: linear-gradient(178deg, rgba(38, 44, 56, .74) 0%, rgba(14, 17, 23, .66) 100%);
+    border: 1px solid var(--edge);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 10px 26px rgba(0, 0, 0, .22);
+    font-size: calc(26px * var(--scale));
+    line-height: 1.35;
+    letter-spacing: .01em;
+    text-align: center;
+    white-space: pre-wrap;
+    word-break: break-word;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .55);
+    transition: opacity .22s ease, transform .22s cubic-bezier(.22, .61, .36, 1);
+  }
+  .line.swap { opacity: 0; transform: translateY(8px); }
+  .line.is-title { font-size: calc(17px * var(--scale)); color: var(--ink-dim); }
+  .line.is-title b { color: var(--ink); font-weight: 600; }
+  /* 没歌词、暂停、或还没播：这块要「轻」，但不能整窗闪出闪进。 */
+  body[data-state="idle"] .line { opacity: .58; }
+
+  .bar {
+    position: absolute; top: 4px; right: 6px;
+    display: flex; gap: 4px;
+    opacity: 0; transition: opacity .16s ease;
+  }
+  .mini:hover .bar, .bar:focus-within { opacity: 1; }
+  .bar button {
+    width: 24px; height: 24px; padding: 0;
+    display: grid; place-items: center;
+    font: inherit; font-size: 13px; line-height: 1;
+    color: var(--ink);
+    background: rgba(24, 28, 36, .72);
+    border: 1px solid var(--edge);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .bar button:hover { background: rgba(44, 52, 66, .82); }
+  .bar button[aria-pressed="false"] { color: var(--ink-dim); }
+  .dot {
+    position: absolute; left: 8px; top: 8px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    opacity: 0; transition: opacity .16s ease;
+  }
+  .mini:hover .dot { opacity: .8; }
+</style>
+</head>
+<body data-state="idle">
+  <div class="mini" id="mini">
+    <div class="dot" id="dot" title="拖动这条歌词即可移动位置"></div>
+    <div class="line" id="line">…</div>
+    <div class="bar">
+      <button id="bMinus" title="小一点" aria-label="小一点">A-</button>
+      <button id="bPlus" title="大一点" aria-label="大一点">A+</button>
+      <button id="bTop" title="置顶" aria-label="置顶" aria-pressed="true">钉</button>
+      <button id="bClose" title="关闭桌面歌词" aria-label="关闭桌面歌词">×</button>
+    </div>
+  </div>
+<script src="/mini.js"></script>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LuHui音乐播放器</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<!-- 线性图标库：24 网格、1.6 笔画，颜色一律 currentColor。
+     以前全站用 ◈ ♥ ↺ ✦ ♪ ▣ 这类字形当图标：不同字体下形状、粗细、基线全不一样，
+     是「像学生作业」的头号来源。内嵌 symbol 不额外发请求，Chromium 87 也认 href。 -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.6 12 4l8 6.6"/><path d="M6.2 9.4V20h11.6V9.4"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.8C19 15.6 12 20 12 20Z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 1.8"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24"><rect x="4" y="9.5" width="16" height="9" rx="2.2"/><path d="m7.5 9.5 8.5-4"/><circle cx="9" cy="14" r="1.3"/><path d="M13 14h4"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 17.5V6.8L19 5v10.5"/><circle cx="6.6" cy="18" r="2.4"/><circle cx="16.6" cy="15.8" r="2.4"/></symbol>
+  <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.3"/><circle cx="12" cy="12" r="2.1"/></symbol>
+  <symbol id="i-artist" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5.5 20c.6-3.6 3.1-5.6 6.5-5.6s5.9 2 6.5 5.6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.8A1.8 1.8 0 0 1 5.3 6h4.2l1.9 2h7.3a1.8 1.8 0 0 1 1.8 1.8v8.4a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8Z"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M4 4h7l9 9-7 7-9-9Z"/><circle cx="8.2" cy="8.2" r="1.2"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.4"/><path d="m15.8 15.8 4.7 4.7"/></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M4 7h3c5 0 5 10 10 10h3"/><path d="M4 17h3c1.7 0 3-1.2 4-2.6"/><path d="M14 7h6m-2.5-2.5L20 7l-2.5 2.5"/><path d="M17.5 14.5 20 17l-2.5 2.5"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-mini" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M9.5 5v14"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24"><path d="M4 7h11M4 12h11M4 17h7"/><path d="m16.5 15 3.5 2-3.5 2z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M7 6v12"/><path d="m18 6-8 6 8 6z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M17 6v12"/><path d="m6 6 8 6-8 6z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 6H8a4 4 0 0 0-4 4v1"/><path d="m15 3.5 2.5 2.5L15 8.5"/><path d="M7 18h9a4 4 0 0 0 4-4v-1"/><path d="m9 15.5-2.5 2.5L9 20.5"/></symbol>
+  <symbol id="i-repeat-one" viewBox="0 0 24 24"><path d="M17 6H8a4 4 0 0 0-4 4v1"/><path d="m15 3.5 2.5 2.5L15 8.5"/><path d="M7 18h9a4 4 0 0 0 4-4v-1"/><path d="m9 15.5-2.5 2.5L9 20.5"/><path d="M12 10.5v4"/><path d="m10.8 11.4 1.2-.9"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="m15 8 4 4-4 4"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 4h6"/></symbol>
+  <symbol id="i-volume-high" viewBox="0 0 24 24"><path d="M4 10v4h3.5L12 18V6L7.5 10Z"/><path d="M15 9a4.5 4.5 0 0 1 0 6"/><path d="M17.5 6.5a8 8 0 0 1 0 11"/></symbol>
+  <symbol id="i-volume-med" viewBox="0 0 24 24"><path d="M4 10v4h3.5L12 18V6L7.5 10Z"/><path d="M15 9a4.5 4.5 0 0 1 0 6"/></symbol>
+  <symbol id="i-volume-low" viewBox="0 0 24 24"><path d="M4 10v4h3.5L12 18V6L7.5 10Z"/><path d="M15 10.5a2.5 2.5 0 0 1 0 3"/></symbol>
+  <symbol id="i-volume-x" viewBox="0 0 24 24"><path d="M4 10v4h3.5L12 18V6L7.5 10Z"/><path d="m16 9.5 4 5M20 9.5l-4 5"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 4H4v5"/><path d="M15 4h5v5"/><path d="M15 20h5v-5"/><path d="M9 20H4v-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-text-size" viewBox="0 0 24 24"><path d="m4 17 4.5-11L13 17"/><path d="M5.8 13h5.4"/><path d="M15 17c2.6 0 4-1.2 4-3.2V10"/><path d="M19.5 12.5c-3.8 0-4.8 1-4.8 2.4 0 1.3 1.1 2.1 2.6 2.1 1.4 0 2.2-.8 2.2-2.1"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3Z"/><path d="M12 14v6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-select" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8 12 2.8 2.8L16.5 9"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.4 5.6"/><path d="M20 5v6h-6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5Z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.6"/><path d="m6.6 17.4 10.8-10.8"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 11v5.5"/><circle cx="12" cy="8.1" r=".9" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M6.5 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v.5"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M5 19l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L9 18l-4 1Z"/><path d="m14.5 6.5 3 3"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10"/><path d="m8 10 4 4 4-4"/><path d="M5 17.5V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5"/><path d="m8 9 4-4 4 4"/><path d="M5 17.5V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9 7V5.2c0-.7.5-1.2 1.2-1.2h3.6c.7 0 1.2.5 1.2 1.2V7"/><path d="m6.5 7 .8 11.4c.05.9.8 1.6 1.7 1.6h6c.9 0 1.65-.7 1.7-1.6L17.5 7"/><path d="M10 11v5.5M14 11v5.5"/></symbol>
+  <symbol id="i-lyrics" viewBox="0 0 24 24"><path d="M4.5 6.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H12l-4.5 3v-3H6.5a2 2 0 0 1-2-2Z"/><path d="M8 9h8M8 12.5h5"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M4.5 9h9a5.5 5.5 0 0 1 0 11H8"/><path d="m8.5 5-4 4 4 4"/></symbol>
+  <symbol id="i-cut" viewBox="0 0 24 24"><circle cx="6.5" cy="7.5" r="2.2"/><circle cx="6.5" cy="16.5" r="2.2"/><path d="M8.3 8.9 19 17M8.3 15.1 19 7"/></symbol>
+  <symbol id="i-paste" viewBox="0 0 24 24"><rect x="5.5" y="4.5" width="13" height="16" rx="2.2"/><path d="M9 4.5v-.7c0-.7.6-1.3 1.3-1.3h3.4c.7 0 1.3.6 1.3 1.3v.7Z"/><path d="M9 11h6M9 14.5h6M9 18h3.5"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-reveal" viewBox="0 0 24 24"><path d="M3.5 7.8A1.8 1.8 0 0 1 5.3 6h4.2l1.9 2h7.3a1.8 1.8 0 0 1 1.8 1.8v8.4a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8Z"/><path d="M9.5 14h5.5"/><path d="m13 11.7 2.3 2.3-2.3 2.3"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="8" y="5.5" width="3" height="13" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="5.5" width="3" height="13" rx="1" fill="currentColor" stroke="none"/></symbol>
+</svg>
+<div class="stage">
+  <div class="backdrop" aria-hidden="true">
+    <div class="bd bd-a" id="bdA"></div>
+    <div class="bd bd-b" id="bdB"></div>
+    <!-- 动态流光：两层跟着封面取色走的慢速光带。CSS 动画，不占 rAF；不在播放时
+         animation-play-state 是 paused（见 app.css 的 html[data-play] 那两条）。 -->
+    <div class="bd-flow" id="bdFlow"><i></i><i></i></div>
+    <div class="bd-grain"></div>
+  </div>
+
+  <!-- ============================ sidebar ============================ -->
+  <aside class="side" id="side">
+    <div class="brand">
+      <div class="brand-mark" id="brandMark">
+        <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+          <path d="M6 4h9a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5H6z" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <circle cx="10.5" cy="10" r="1.5" fill="currentColor"/><circle cx="10.5" cy="16" r="1.5" fill="currentColor"/>
+          <path d="M23 9l4 3-4 3z" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <b>LuHui音乐播放器</b><span>LuHui Music Player</span>
+      </div>
+      <button class="icon-btn tiny side-close only-narrow" id="btnSideClose" title="关闭导航" aria-label="关闭导航"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+
+    <nav class="nav" id="nav">
+      <div class="nav-group-label">快速播放</div>
+      <a class="nav-item" data-view="home" href="#/home"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg><span>此刻</span></a>
+      <a class="nav-item" data-view="favorites" href="#/favorites"><svg class="ic" aria-hidden="true"><use href="#i-heart"/></svg><span>我喜欢的</span><em id="navFavCount"></em></a>
+      <a class="nav-item" data-view="history" href="#/history"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span>最近播放</span></a>
+      <a class="nav-item" data-view="radio" href="#/radio" title="按当前心情随机连播"><svg class="ic" aria-hidden="true"><use href="#i-radio"/></svg><span>随意电台</span></a>
+
+      <div class="nav-group-label">音乐库</div>
+      <a class="nav-item" data-view="songs" href="#/songs"><svg class="ic" aria-hidden="true"><use href="#i-music"/></svg><span>所有歌曲</span><em id="navTrackCount"></em></a>
+      <a class="nav-item" data-view="albums" href="#/albums"><svg class="ic" aria-hidden="true"><use href="#i-disc"/></svg><span>专辑</span></a>
+      <a class="nav-item" data-view="artists" href="#/artists"><svg class="ic" aria-hidden="true"><use href="#i-artist"/></svg><span>艺术家</span></a>
+      <a class="nav-item" data-view="folders" href="#/folders"><svg class="ic" aria-hidden="true"><use href="#i-folder"/></svg><span>文件夹</span></a>
+      <a class="nav-item" data-view="genres" href="#/genres"><svg class="ic" aria-hidden="true"><use href="#i-tag"/></svg><span>流派</span></a>
+
+      <div class="nav-group-label with-btn">
+        <span>歌单</span>
+        <button class="icon-btn tiny" id="btnNewPlaylist" title="新建歌单" aria-label="新建歌单"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="nav-playlists" id="navPlaylists"></div>
+    </nav>
+
+    <div class="side-foot">
+      <div class="scan" id="scanPill" hidden>
+        <div class="scan-bar"><i id="scanBarFill"></i></div>
+        <span id="scanText">扫描中…</span>
+      </div>
+      <button class="lib-source" id="libSource" type="button" aria-haspopup="menu" title="音乐文件夹">
+        <svg class="ic lib-ic" aria-hidden="true"><use href="#i-folder"/></svg>
+        <span class="lib-source-text"><b id="libSourceTitle">音乐文件夹</b><em id="libSourceSub">正在读取…</em></span>
+        <svg class="ic chev" aria-hidden="true"><use href="#i-right"/></svg>
+      </button>
+      <a class="nav-item settings" data-view="settings" href="#/settings"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg><span>设置</span></a>
+    </div>
+  </aside>
+
+  <!-- ============================ content ============================ -->
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn only-narrow" id="btnDrawer" title="打开导航" aria-label="打开导航" aria-haspopup="dialog"><svg class="ic" aria-hidden="true"><use href="#i-menu"/></svg></button>
+        <button class="icon-btn" id="btnBack" title="返回" aria-label="返回上一页"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg></button>
+        <h1 class="view-title" id="viewTitle">此刻</h1>
+        <span class="view-sub" id="viewSub"></span>
+      </div>
+      <div class="topbar-right">
+        <div class="search">
+          <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="searchInput" type="search" placeholder="搜索歌曲、专辑、艺术家" title="按 / 聚焦搜索" aria-label="搜索歌曲、专辑、艺术家" autocomplete="off" spellcheck="false" aria-controls="view">
+          <button class="search-clear" id="searchClear" type="button" title="清空搜索" aria-label="清空搜索" hidden><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+          <kbd>/</kbd>
+        </div>
+        <button class="icon-btn only-narrow" id="btnNpMobile" title="播放面板" aria-label="打开播放面板"><svg class="ic" aria-hidden="true"><use href="#i-lyrics"/></svg></button>
+        <button class="icon-btn" id="btnShuffleAll" title="随机播放全部" aria-label="随机播放全部"><svg class="ic" aria-hidden="true"><use href="#i-shuffle"/></svg></button>
+        <button class="icon-btn" id="btnTheme" title="深/浅主题" aria-label="切换深浅主题"><svg class="ic" aria-hidden="true"><use href="#i-theme"/></svg></button>
+        <button class="icon-btn" id="btnMini" title="置顶迷你窗" aria-label="专注模式"><svg class="ic" aria-hidden="true"><use href="#i-mini"/></svg></button>
+      </div>
+    </header>
+
+    <div class="scroller" id="scroller">
+      <section class="view" id="view"></section>
+      <div class="listfoot" id="listFoot" hidden><span class="spin"></span>加载更多…</div>
+    </div>
+
+    <!-- empty state, first run -->
+    <div class="welcome" id="welcome" hidden>
+      <div class="welcome-card">
+        <div class="welcome-icon"><svg class="ic" aria-hidden="true"><use href="#i-music"/></svg></div>
+        <h2>还没有曲库</h2>
+        <p>选择一个装满音乐的文件夹，LuHui音乐播放器会在后台读取标签、封面和歌词。<br>也可以把一个文件夹<b>直接拖到窗口里</b>。</p>
+        <div class="welcome-actions">
+          <button class="primary" id="btnWelcomePick">选择音乐文件夹</button>
+          <button class="ghost" id="btnWelcomeManual">手动输入路径</button>
+        </div>
+        <div class="welcome-manual" id="welcomeManual" hidden>
+          <input id="welcomePath" type="text" placeholder="例如 D:\Music" spellcheck="false">
+          <button class="ghost" id="btnWelcomeGo">导入</button>
+        </div>
+        <div class="welcome-hint" id="welcomeHint"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============================ now playing panel ============================ -->
+  <aside class="np" id="npPanel">
+    <div class="np-head">
+      <span class="np-tabs" id="npTabs" role="tablist" aria-label="播放面板">
+        <button class="np-tab active" id="npTabLyric" data-tab="lyric" role="tab" aria-selected="true" aria-controls="npPaneLyric" tabindex="0">歌词</button>
+        <button class="np-tab" id="npTabQueue" data-tab="queue" role="tab" aria-selected="false" aria-controls="npPaneQueue" tabindex="-1">队列</button>
+        <button class="np-tab" id="npTabInfo" data-tab="info" role="tab" aria-selected="false" aria-controls="npPaneInfo" tabindex="-1">详情</button>
+      </span>
+      <button class="icon-btn tiny" id="btnNpHide" title="收起面板" aria-label="收起播放面板"><svg class="ic" aria-hidden="true"><use href="#i-right"/></svg></button>
+    </div>
+
+    <div class="np-body">
+      <div class="np-pane" id="npPaneLyric" data-pane="lyric" role="tabpanel" aria-labelledby="npTabLyric">
+        <div class="lyric-box" id="lyricBox">
+          <div class="lyric-empty" id="lyricEmpty">
+            <div class="le-mark"><svg class="ic" aria-hidden="true"><use href="#i-lyrics"/></svg></div>
+            <span class="le-title">暂无歌词</span>
+            <button class="ghost le-attach" id="btnAttachLyric" aria-label="为当前歌曲挂载歌词文件"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>挂载 .lrc 文件</button>
+          </div>
+          <div class="lyric-lines" id="lyricLines"></div>
+        </div>
+      </div>
+
+      <div class="np-pane" id="npPaneQueue" data-pane="queue" role="tabpanel" aria-labelledby="npTabQueue" hidden>
+        <div class="queue-head">
+          <span id="queueCount">0 首</span>
+          <div>
+            <button class="link-btn" id="btnQueueClear" aria-label="清空播放队列">清空</button>
+          </div>
+        </div>
+        <div class="queue-list" id="queueList"></div>
+      </div>
+
+      <div class="np-pane" id="npPaneInfo" data-pane="info" role="tabpanel" aria-labelledby="npTabInfo" hidden>
+        <div class="meta" id="metaBox"></div>
+      </div>
+    </div>
+
+    <div class="np-cover-wrap" id="npCoverWrap">
+      <div class="np-cover" id="npCover">
+        <img id="npCoverImg" alt="" draggable="false">
+        <div class="cover-ghost" id="coverGhost"><svg class="ic" aria-hidden="true"><use href="#i-music"/></svg></div>
+      </div>
+      <div class="np-credit">
+        <div class="np-title" id="npTitle">未在播放</div>
+        <div class="np-artist" id="npArtist">选一首歌开始</div>
+      </div>
+      <div class="np-actions">
+        <button class="icon-btn" id="btnFav" title="喜欢" aria-label="喜欢" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-heart"/></svg></button>
+        <button class="icon-btn" id="btnLyricSize" title="歌词字号" aria-label="切换歌词字号"><svg class="ic" aria-hidden="true"><use href="#i-text-size"/></svg></button>
+        <button class="icon-btn" id="btnFull" title="全屏播放页" aria-label="打开全屏播放页"><svg class="ic" aria-hidden="true"><use href="#i-expand"/></svg></button>
+      </div>
+    </div>
+  </aside>
+  <button class="np-restore" id="btnNpShow" title="展开歌词面板" aria-label="展开播放面板" hidden><svg class="ic" aria-hidden="true"><use href="#i-left"/></svg></button>
+
+  <!-- ============================ player bar ============================ -->
+  <footer class="player" id="player">
+    <div class="p-left" id="pLeft">
+      <div class="p-cover" id="pCover">
+        <img id="pCoverImg" alt="" draggable="false">
+        <div class="cover-ghost small"><svg class="ic" aria-hidden="true"><use href="#i-music"/></svg></div>
+      </div>
+      <div class="p-meta">
+        <div class="p-title" id="pTitle">未在播放</div>
+        <div class="p-artist" id="pArtist">—</div>
+      </div>
+      <button class="icon-btn" id="btnFav2" title="喜欢" aria-label="喜欢" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-heart"/></svg></button>
+    </div>
+
+    <div class="p-center">
+      <div class="p-buttons">
+        <button class="icon-btn mode" id="btnMode" title="列表循环" aria-label="播放模式：列表循环"><svg class="ic" aria-hidden="true"><use href="#i-repeat"/></svg></button>
+        <button class="icon-btn" id="btnPrev" title="上一曲" aria-label="上一曲"><svg class="ic" aria-hidden="true"><use href="#i-prev"/></svg></button>
+        <button class="play-btn" id="btnPlay" title="播放/暂停 (空格)" aria-label="播放"><span class="tri"></span></button>
+        <button class="icon-btn" id="btnNext" title="下一曲" aria-label="下一曲"><svg class="ic" aria-hidden="true"><use href="#i-next"/></svg></button>
+        <button class="icon-btn" id="btnSleep" title="定时停止" aria-label="定时停止播放"><svg class="ic" aria-hidden="true"><use href="#i-timer"/></svg></button>
+      </div>
+      <div class="p-progress">
+        <span class="time" id="tCur">0:00</span>
+        <!-- 进度条的 value 用「秒」：aria-valuetext 念的是「0:12 / 3:45」，valuenow 若报百分比
+             （上一版就是 5 对 0:01），读屏软件按方向键调步长时会对不上号。
+             max 由 tick() 在拿到 duration 后填，这里先写 0 而不是不写 —— 没写等于没声明。 -->
+        <div class="bar" id="seekBar" role="slider" aria-label="播放进度" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" tabindex="0">
+          <div class="bar-buf" id="barBuf"></div>
+          <div class="bar-rail"></div>
+          <div class="bar-fill" id="barFill"></div>
+          <div class="bar-tip" id="barTip" hidden>0:00</div>
+          <div class="bar-thumb" id="barThumb"></div>
+        </div>
+        <span class="time" id="tTot">0:00</span>
+      </div>
+    </div>
+
+    <div class="p-right">
+      <canvas class="spectrum" id="spectrum" width="112" height="34" aria-hidden="true"></canvas>
+      <button class="icon-btn" id="btnQueue" title="播放队列" aria-label="查看播放队列"><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg></button>
+      <div class="vol" id="volWrap">
+        <button class="icon-btn" id="btnMute" title="静音" aria-label="静音"><svg class="ic" aria-hidden="true"><use href="#i-volume-high"/></svg></button>
+        <div class="bar volbar" id="volBar" role="slider" aria-label="音量" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" tabindex="0">
+          <div class="bar-rail"></div><div class="bar-fill" id="volFill"></div><div class="bar-thumb" id="volThumb"></div>
+        </div>
+      </div>
+    </div>
+  </footer>
+  <!-- 遮罩必须在 .stage 这个层叠上下文里：.stage 的 z-index:0 会把子元素整体封在
+       一个栈里，放在外面即使 z-index 比抽屉高，也会把抽屉一起盖住、一起模糊。 -->
+  <div class="scrim" id="scrim" aria-hidden="true"></div>
+</div>
+
+<!-- ============================ fullscreen now playing ============================ -->
+<div class="fs" id="fs" hidden>
+  <div class="fs-bg" id="fsBg"></div>
+  <div class="fs-inner">
+    <button class="icon-btn fs-close" id="btnFsClose" title="退出全屏 (Esc / F)" aria-label="退出全屏"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+    <div class="fs-cover" id="fsCover"><img id="fsCoverImg" alt="" draggable="false"><div class="cover-ghost"><svg class="ic" aria-hidden="true"><use href="#i-music"/></svg></div></div>
+    <div class="fs-right">
+      <div class="fs-title" id="fsTitle">未在播放</div>
+      <div class="fs-artist" id="fsArtist">—</div>
+      <div class="fs-lyric" id="fsLyric" role="region" aria-label="歌词" aria-live="polite"></div>
+      <div class="fs-controls">
+        <div class="fs-progress">
+          <span class="time" id="fsCur">0:00</span>
+          <div class="bar" id="fsSeek" role="slider" aria-label="播放进度" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" tabindex="0"><div class="bar-buf" id="fsBuf"></div><div class="bar-rail"></div>
+            <div class="bar-fill" id="fsFill"></div><div class="bar-thumb" id="fsThumb"></div></div>
+          <span class="time" id="fsTot">0:00</span>
+        </div>
+        <div class="fs-buttons">
+          <button class="icon-btn mode" id="fsMode" title="列表循环" aria-label="播放模式：列表循环"><svg class="ic" aria-hidden="true"><use href="#i-repeat"/></svg></button>
+          <button class="icon-btn" id="fsPrev" title="上一曲" aria-label="上一曲"><svg class="ic" aria-hidden="true"><use href="#i-prev"/></svg></button>
+          <button class="play-btn big" id="fsPlay" title="播放/暂停 (空格)" aria-label="播放"><span class="tri"></span></button>
+          <button class="icon-btn" id="fsNext" title="下一曲" aria-label="下一曲"><svg class="ic" aria-hidden="true"><use href="#i-next"/></svg></button>
+          <button class="icon-btn" id="fsFav" title="喜欢" aria-label="喜欢" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-heart"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ shared widgets ============================ -->
+<div class="menu" id="ctxMenu" role="menu" aria-label="操作菜单" hidden></div>
+<div class="dialog-mask" id="dialogMask" hidden>
+  <div class="dialog" id="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+    <h3 id="dialogTitle">标题</h3>
+    <div class="dialog-body" id="dialogBody"></div>
+    <div class="dialog-actions">
+      <button class="ghost" id="dialogCancel">取消</button>
+      <button class="primary" id="dialogOk">确定</button>
+    </div>
+  </div>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<input type="file" id="lyricFile" accept=".lrc,.txt" hidden>
+<audio id="audio" preload="auto" crossorigin="anonymous"></audio>
+<audio id="audio2" preload="none" crossorigin="anonymous"></audio>
+
+<script src="app.js"></script>
+</body>
+</html>

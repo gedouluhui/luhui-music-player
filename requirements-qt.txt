@@ -1,0 +1,5 @@
+# 旧版 Qt 外壳（可选）。原生 WinUI 外壳不需要这两个包。
+-r requirements.txt
+PyQt5>=5.15,<5.16
+PyQtWebEngine>=5.15,<5.16
+pywin32>=306
