@@ -303,7 +303,7 @@ async function nativeCtl(action, extra) {
   } else if (!stale && r && r.engine === 'native' && r.path && !sameTrack) {
     S._natLoadedId = null;
   }
-  if (!stale && r && r.ok !== false && (action === 'play') && sameTrack) {
+  if (!stale && r && r.ok !== false && (action === 'play') && sameTrack && !r.error) {
     if (typeof extra?.track_id === 'number') S._natLoadedId = extra.track_id;
     if (S.playing !== true) { S.playing = true; syncPlayUI(); }
   }
