@@ -1,5 +1,7 @@
 # LuHui音乐播放器（LuHui Music Player）
 
+**中文** · [English](README.en.md)
+
 **Windows 本地音乐播放器：WinUI 3 原生外壳 + 本地 Python 音频服务 + WASAPI 输出。**
 
 <p>
