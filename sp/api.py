@@ -22,7 +22,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from . import db, lyrics as lrc, metadata, playback, scanner
 from . import audioplay, downmix
 from .textidx import pinyin_initial
-from .config import APP_NAME, data_root, normalize_path, port_path, settings_path, web_root
+from .config import (APP_NAME, LYRIC_EXTS, data_root, normalize_path, port_path,
+                     settings_path, web_root)
 
 MIME_BY_EXT = {
     ".mp3": "audio/mpeg", ".flac": "audio/flac", ".m4a": "audio/mp4", ".mp4": "audio/mp4",
@@ -98,6 +99,74 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
 UI_HOOKS: Dict[str, Callable[..., Any]] = {"pick_folder": None, "about": None}
 # injected window controls; absent (no-op) in headless/browser mode
 WINDOW_HOOKS: Dict[str, Callable[..., Any]] = {}
+
+# 歌词文件的上限：正常 LRC 几十 KB，1 MB 已经足够宽松；同时挡住「挂一个几百 MB
+# 的文本文件进来」这种读取放大。lrc.read_text 自己也只读 2 MB，两层一致。
+_LYRIC_MAX_BYTES = 1_000_000
+# 桌面文件选择器返回的路径只在一小段时间内算「用户授权过」。attach 用掉即作废；
+# 这样 API 不能凭一个路径字符串读走任意文件，而用户点选歌词的正常流程不受影响。
+_PICKED_TTL = 300.0
+_PICKED_FILES: Dict[str, float] = {}
+_PICKED_LOCK = threading.Lock()
+
+
+def _remember_picked_file(path: str) -> None:
+    """记下「本进程的文件选择器刚刚返回了这份文件」这件事（仅歌词扩展名）。"""
+    p = normalize_path(path or "")
+    if not p or Path(p).suffix.lower() not in LYRIC_EXTS:
+        return
+    key = os.path.normcase(p)
+    now = time.time()
+    with _PICKED_LOCK:
+        for k, ts in list(_PICKED_FILES.items()):
+            if now - ts > _PICKED_TTL:
+                _PICKED_FILES.pop(k, None)
+        _PICKED_FILES[key] = now
+
+
+def _take_picked_file(path: str) -> bool:
+    """一次性消费选择器票据；返回 True 才允许读这个路径。"""
+    key = os.path.normcase(normalize_path(path or ""))
+    if not key:
+        return False
+    now = time.time()
+    with _PICKED_LOCK:
+        ts = _PICKED_FILES.pop(key, None)
+    return ts is not None and (now - ts) <= _PICKED_TTL
+
+
+def _same_path(a: str, b: str) -> bool:
+    """Windows 卷大小写不敏感，但目录必须一起比 —— basename 不是身份。"""
+    if not a or not b:
+        return False
+    try:
+        return os.path.normcase(normalize_path(a)) == os.path.normcase(normalize_path(b))
+    except Exception:
+        return False
+
+
+def _lyric_file_ok(path: str) -> bool:
+    """扩展名/大小/存在性三重门；路径本身已经被 normalize_path 展开成真实路径。"""
+    try:
+        if not path or not os.path.isfile(path):
+            return False
+        if Path(path).suffix.lower() not in LYRIC_EXTS:
+            return False
+        return os.path.getsize(path) <= _LYRIC_MAX_BYTES
+    except OSError:
+        return False
+
+
+def _path_in_roots(path: str, roots: List[str]) -> bool:
+    """realpath 之后的目录前缀校验（commonpath 不会把 C:\\x 和 C:\\xyz 混为一谈）。"""
+    np = os.path.normcase(normalize_path(path or ""))
+    for root in roots:
+        try:
+            if np and root and os.path.commonpath([np, root]) == root:
+                return True
+        except ValueError:
+            continue        # 不同盘符
+    return False
 
 
 def _window_hook(name: str, *args: Any) -> Dict[str, Any]:
@@ -355,9 +424,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Range")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+        # 这里**不再**回 Access-Control-Allow-Origin: *。页面和后端同源
+        # （127.0.0.1:<port>），CORS 对它没有用处；通配符只让任意网页拿到了
+        # 「读响应」的授权。跨站预检/请求由 _guard() 直接 403。
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -366,6 +435,29 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 pass
+
+    def _guard(self) -> bool:
+        """Host/Origin 白名单：挡住 DNS rebinding 与浏览器跨站调用。
+
+        威胁模型是「用户浏览器里的任意网页」：同用户的本机进程本来就能直接读曲库，
+        不是这一层能解决的；这里要关的是网页把 127.0.0.1 当成自家源来读写的那条路。
+        - Host 必须是本机回环 + 本服务端口。DNS rebinding 请求带的是攻击者域名，被挡。
+        - 带 Origin 的请求必须是本应用自己的页面；没带 Origin 的（curl / 原生壳 /
+          同源导航）不是浏览器跨站请求，放行。
+        """
+        port = int(getattr(self.server, "server_port", 0) or 0)
+        allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        host = (self.headers.get("Host") or "").strip().lower()
+        if host not in allowed_hosts:
+            self._json({"error": "invalid host"}, 403)
+            return False
+        origin = (self.headers.get("Origin") or "").strip().lower().rstrip("/")
+        if origin:
+            allowed_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
+            if origin not in allowed_origins:
+                self._json({"error": "forbidden origin"}, 403)
+                return False
+        return True
 
     def _json(self, obj: Any, code: int = 200) -> None:
         self._send(code, json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8"))
@@ -428,6 +520,9 @@ class Handler(BaseHTTPRequestHandler):
             return {}
 
     def do_OPTIONS(self) -> None:  # noqa: N802
+        if not self._guard():
+            return
+        # 不给跨站预检发许可头：同源页面本来就不需要预检。
         self._send(204, b"", "text/plain")
 
     def do_HEAD(self) -> None:  # noqa: N802
@@ -435,6 +530,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------------------------------------------------------------- routes
     def do_GET(self) -> None:  # noqa: N802
+        if not self._guard():
+            return
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         q = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
@@ -576,6 +673,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": False, "error": str(e)})
             if not picked:
                 return self._json({"ok": False, "cancelled": True})
+            if want_file:
+                # 「用户刚在本进程的对话框里选了这份文件」——歌词 attach 认这张一次性票据。
+                _remember_picked_file(str(picked))
             return self._json({"ok": True, "path": picked})
         if path == "/api/library/add":
             p = (body.get("path") or "").strip().strip('"')
@@ -673,9 +773,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/lyrics/save":
             return self._json(self._save_lyric_text(int(body.get("track_id") or 0),
                                                     str(body.get("text") or "")))
+        if path == "/api/lyrics/save_bytes":
+            # 原生壳的 WinUI 文件选择器读不到服务端的票据；它把用户选中的**字节**
+            # 传上来，由服务端按同一套歌词逻辑解码/落盘。这样既不开放任意路径读取，
+            # 也不会把 GBK 歌词按 UTF-8 解码成乱码（C# 只负责读文件字节）。
+            return self._json(self._save_lyric_bytes(int(body.get("track_id") or 0),
+                                                     str(body.get("data_b64") or "")))
         return self._json({"error": "unknown endpoint", "path": path}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
+        if not self._guard():
+            return
         parsed = urllib.parse.urlparse(self.path)
         try:
             return self._post_api(parsed.path, self._body())
@@ -689,6 +797,8 @@ class Handler(BaseHTTPRequestHandler):
     do_PUT = do_PATCH = do_POST
 
     def do_DELETE(self) -> None:  # noqa: N802
+        if not self._guard():
+            return
         parsed = urllib.parse.urlparse(self.path)
         body = dict(self._body())
         if parsed.path.startswith("/api/playlists/"):
@@ -1029,22 +1139,83 @@ class Handler(BaseHTTPRequestHandler):
         })
         return {"saved": len(ids)}
 
+    @staticmethod
+    def _lyric_roots(t: Dict[str, Any]) -> List[str]:
+        """一首歌允许读歌词的两个根：歌曲所在目录 + 应用数据目录。"""
+        roots: List[str] = []
+        folder = t.get("folder") or (
+            os.path.dirname(t.get("path") or "") if t.get("path") else "")
+        if folder:
+            roots.append(os.path.normcase(normalize_path(str(folder))))
+        roots.append(os.path.normcase(normalize_path(str(data_root()))))
+        return [r for r in roots if r]
+
     def _attach_lyric(self, tid: int, path: str) -> Dict[str, Any]:
         t = db.get_track(tid)
         if not t:
             return {"ok": False, "error": "曲目不存在"}
         p = normalize_path(path)
-        if not os.path.isfile(p):
+        if not p:
             return {"ok": False, "error": "歌词文件不存在"}
+        if Path(p).suffix.lower() not in LYRIC_EXTS:
+            return {"ok": False, "error": "歌词文件必须是 .lrc 或 .txt"}
         try:
-            text = lrc.read_text(p)
-        except Exception as e:
-            return {"ok": False, "error": f"读取失败: {e}"}
+            size = os.path.getsize(p) if os.path.isfile(p) else -1
+        except OSError:
+            size = -1
+        if size < 0:
+            return {"ok": False, "error": "歌词文件不存在"}
+        if size > _LYRIC_MAX_BYTES:
+            return {"ok": False, "error": "歌词文件太大（上限 1 MB）"}
+
+        text: Optional[str] = None
+        store_path = p
+        if not _path_in_roots(p, self._lyric_roots(t)):
+            if not _take_picked_file(p):
+                return {"ok": False,
+                        "error": "歌词文件必须在歌曲所在文件夹或应用数据目录内"}
+            # 用户刚通过本进程的文件对话框选过它：读一次并复制进数据目录。
+            # 票据一次性，之后 _lyrics 只从歌曲目录/数据目录读，不再认任意外部路径。
+            try:
+                text = lrc.read_text(p)
+                dest = Path(data_root()) / "lyrics" / ("%d.lrc" % int(tid))
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(text, encoding="utf-8")
+            except OSError as e:
+                return {"ok": False, "error": f"读取失败: {e}"}
+            store_path = p = str(dest)
+        if text is None:
+            try:
+                text = lrc.read_text(p)
+            except Exception as e:
+                return {"ok": False, "error": f"读取失败: {e}"}
         parsed = lrc.parse(text)
         if not parsed["lines"] and not parsed.get("plain"):
             return {"ok": False, "error": "该文件没有可用的歌词内容"}
-        db.write("UPDATE tracks SET lyric_path = ? WHERE id = ?", (p, tid))
-        return {"ok": True, "path": p, "lines": len(parsed["lines"])}
+        db.write("UPDATE tracks SET lyric_path = ? WHERE id = ?", (store_path, tid))
+        return {"ok": True, "path": store_path, "lines": len(parsed["lines"])}
+
+    def _save_lyric_bytes(self, tid: int, data_b64: str) -> Dict[str, Any]:
+        """原生壳专用：接收选中歌词文件的**字节**（base64），在服务端解码。
+
+        为什么不是让原生壳把路径递进来：那等于把 A2 的任意文件读取重新打开。
+        为什么不是让 C# 先解码成字符串：LRC 常见 GBK/Big5，C# 默认 UTF-8 会把它们
+        读成乱码；sp/lyrics.decode_bytes 有整套编码探测，应该由它来判。
+        """
+        if not data_b64:
+            return {"ok": False, "error": "歌词内容是空的"}
+        import base64
+        try:
+            raw = base64.b64decode(data_b64.encode("ascii"), validate=True)
+        except Exception:
+            return {"ok": False, "error": "歌词数据不是合法的 base64"}
+        if len(raw) > _LYRIC_MAX_BYTES:
+            return {"ok": False, "error": "歌词文件太大（上限 1 MB）"}
+        try:
+            text = lrc.decode_bytes(raw)
+        except Exception as e:
+            return {"ok": False, "error": f"读取失败: {e}"}
+        return self._save_lyric_text(tid, text)
 
     def _save_lyric_text(self, tid: int, text: str) -> Dict[str, Any]:
         """把用户粘进来/选进来的歌词正文落成 <data>/lyrics/<track_id>.lrc 并挂载。
@@ -1256,9 +1427,9 @@ class Handler(BaseHTTPRequestHandler):
             tid = int(body.get("track_id") or 0)
             t = db.get_track(tid) if tid else None
             cur = str((eng.state() or {}).get("path") or "")
-            if t is not None and (not cur or
-                                  os.path.basename(str(t["path"])).lower() !=
-                                  os.path.basename(cur).lower()):
+            # 身份是完整路径，不是 basename：两个目录里各有一首 same.flac 时，
+            # 按文件名比会把控制动作发给错误的那一首（seek/暂停被吞或作用错对象）。
+            if t is not None and (not cur or not _same_path(str(t["path"]), cur)):
                 return {"ok": True, "ignored": "track_mismatch", **eng.state()}
         if action == "play":
             tid = int(body.get("track_id") or 0)
@@ -1334,6 +1505,12 @@ class Handler(BaseHTTPRequestHandler):
         text = ""
         lp = t.get("lyric_path") or ""
         if lp and os.path.isfile(lp):
+            # 读侧同一条闸：老版本可能存过任意外部路径，这样的行只清掉、绝不读。
+            # 文件暂时不在（移动盘拔了）时不清，保留原关联。
+            if not (_lyric_file_ok(lp) and _path_in_roots(lp, self._lyric_roots(t))):
+                db.write("UPDATE tracks SET lyric_path = '' WHERE id = ?", (tid,))
+                lp = ""
+        if lp and os.path.isfile(lp):
             try:
                 text = lrc.read_text(lp)
                 src = lp
@@ -1345,7 +1522,8 @@ class Handler(BaseHTTPRequestHandler):
             src = "embedded"
         if not text:
             guess = self._guess_lrc_sidecar(t)
-            if guess:
+            if guess and _lyric_file_ok(guess) and _path_in_roots(
+                    guess, self._lyric_roots(t)):
                 try:
                     text = lrc.read_text(guess)
                     src = guess

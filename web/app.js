@@ -256,14 +256,17 @@ function durNow() { if (isNative()) return S._nat.duration || 0; const d = audio
 function _isPaused() { return isNative() ? !S._nat.playing : !!audio.paused; }
 function bufferedFrac() { if (isNative()) return S._nat.playing ? durNow() : 0; const b = audio.buffered; return (b && b.length) ? b.end(b.length - 1) : 0; }
 function _natAnchorFrom(st) { S._natAnchor = (+st.position) || 0; S._natAnchorPerf = performance.now(); }
-/* 「服务端载着的」和「界面上这首」是不是同一个文件：服务端只报路径，前端只认 id，
-   所以按文件名（basename、大小写不敏感）对撞，path 缺时用 row 自带的 filename。
-   不拿 duration 当身份 —— 同专辑翻录、现场版同长太常见，那条尺会把两首不同的歌读成同一首。 */
+/* 「服务端载着的」和「界面上这首」是不是同一个文件：比完整路径（Windows 大小写不敏感），
+   不再只比 basename —— 两个目录各有一首 same.flac 时，文件名不是身份，会把控制动作
+   发给错误的那首。path 缺失的行（远程/流式形状）才退回 filename。 */
 function _natSameFile(serverPath, t) {
   if (!serverPath || !t) return false;
-  const b = (s) => String(s || '').split(/[\\/]/).pop().toLowerCase();
-  const hit = b(serverPath);
-  return hit === b(t.path) || (!!t.filename && hit === b(t.filename));
+  const norm = (s) => String(s || '').replace(/\//g, '\\')
+    .replace(/\\+/g, '\\').replace(/\\$/, '').toLowerCase();
+  const sp = norm(serverPath);
+  if (!sp) return false;
+  if (t.path) return sp === norm(t.path);
+  return !!t.filename && sp.split('\\').pop() === norm(t.filename);
 }
 
 /* 服务端 state() 的形状：{ok, engine:'native', path, playing, position, duration, rate(=采样率),
@@ -308,10 +311,28 @@ async function nativeCtl(action, extra) {
      pause 之后那张表会被 _syncPollForState() 停掉，「暂停」这一句只能在这里说出口。
      只对服务端自己的回话（engine==='native'）渲染；track_mismatch 那种保护性空回也带 state，
      说引擎的真话没问题。 */
-  if (r && r.engine === 'native') { adoptEqEcho(r); renderNativeStatus(r); }
+  if (r && r.engine === 'native') { adoptEqEcho(r); renderNativeStatus(r); natErrorNotice(r); }
   consumeNatReshape();   // 起播途中改过的开流参数：这一趟落定后按新参数补开一次
   _syncPollForState();
   return r;
+}
+/* A4/A5：解码坏掉 / 解码器起不来是「放不了」，不是「播完了」。
+   服务端已经把两者分开报（state.error），这里负责说出口，并撤掉「服务端已载本曲」——
+   否则用户再按播放会走 resume，而错误态下引擎拒绝 resume（放行等于进度条空转），
+   看起来就是「点了没反应」。同一份错误只提示一次，免得 220ms 轮询刷满屏。 */
+function natErrorNotice(st) {
+  const err = st && st.error;
+  if (!err) { S._natErrShown = ''; return; }
+  const kind = String(err.kind || 'error');
+  const detail = String(err.detail || '').trim().slice(0, 160);
+  const sig = kind + '|' + (err.rc == null ? '' : err.rc) + '|' + detail;
+  if (S._natErrShown === sig) return;
+  S._natErrShown = sig;
+  S._natLoadedId = null;                    // 下一次按播放走 fresh play，不是 resume
+  const why = kind === 'decoder_unavailable'
+    ? '解码器不可用（ffmpeg 起不来）'
+    : '解码失败' + (err.rc != null ? '（ffmpeg 退出码 ' + err.rc + '）' : '');
+  toast('无法播放：' + why + (detail ? ' — ' + detail : ''), 'err', 8000);
 }
 /* 轮询只在「原生且正在播」时活着：暂停/结束/离开原生都停表，闲置那笔账才守得住。
    第二个条件（S.playing）是给「服务端回了但形状里没有 state」留的后路：那种时候界面自认为在播，
@@ -349,6 +370,7 @@ async function nativePollTick() {
   _natAnchorFrom(st);
   adoptEqEcho(st);
   renderNativeStatus(st);
+  natErrorNotice(st);
   if (st.playing !== S.playing) { S.playing = !!st.playing; syncPlayUI(); }
   if (st.playing) _fetchNativeSpectrum();
   /* 每一拍都按「服务端真在不在播」重定一次表的生死：上面那条兜底把表叫起来之后，
@@ -431,6 +453,10 @@ async function renderNativeStatus(st) {
       sigText = nativeSignalPath(st);
       const bits = [
         '状态 ' + (st.playing ? '播放中' : (st.ended ? '未播放' : '暂停')),
+        // 解码错误要在这行镜子里面说清楚，不能只靠一条会消失的 toast：
+        // 「暂停」和「这首歌坏了」是两件事，面板打开着的人有权看到是哪一种。
+        st.error ? ('解码错误（' + (st.error.kind || 'error')
+                   + (st.error.rc != null ? ' · rc ' + st.error.rc : '') + '）') : '',
         '输出 ' + (st.mode || 'shared'),
         '格式 ' + (st.rate || 0) + ' Hz / ' + (st.channels || 0) + ' 声道',
         st.speed && st.speed !== 1 ? ('流内倍速 ' + (+st.speed).toFixed(2) + '×') : '',
@@ -600,6 +626,7 @@ async function startNative(track, autoplay) {
   S._natAnchor = 0; S._natAnchorPerf = performance.now();
   S._nat.playing = false; S._nat.ended = false; S._nat.ok = true; S._nat.error = '';
   S._natLoadedId = null;
+  S._natErrShown = '';            // 新起播 = 新的一轮：上一首的错误去重标记作废
   if (!autoplay) { S._nat.ended = false; return; }
   natShapeTake();                 // 这一趟按哪组开流参数开——之后判「设置变过没有」的底本
   const r = await nativeCtl('play', { track_id: track.id, pos: 0 });

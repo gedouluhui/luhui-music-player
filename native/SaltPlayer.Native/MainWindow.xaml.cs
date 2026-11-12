@@ -3467,8 +3467,12 @@ public sealed partial class MainWindow : Window
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
             var file = await picker.PickSingleFileAsync();
             if (file is null) return;
-            var r = await _api.PostAsync<LyricEditResponse>("lyrics/attach",
-                new { track_id = track.Id, path = file.Path });
+            // 不把本机路径交给服务端读（审查 A2：任意文件读取）。WinUI 这边自己把文件的
+            // 原始字节读出来、按 base64 上传，服务端按歌词编码（UTF-8/GBK/Big5…）解码后
+            // 存进数据目录 —— 既不经手「读哪个路径」，也不丢非 UTF-8 歌词。
+            var raw = await System.IO.File.ReadAllBytesAsync(file.Path);
+            var r = await _api.PostAsync<LyricEditResponse>("lyrics/save_bytes",
+                new { track_id = track.Id, data_b64 = Convert.ToBase64String(raw) });
             if (!r.Ok)
             {
                 ShowToast(r.Error ?? "挂载失败");

@@ -486,6 +486,11 @@ class NativeEngine:
         self._underruns = 0
         self._mode = "shared"
         self._native_note = ""
+        # 最近一次「不是用户主动停止」的解码错误。None＝没出错。
+        # 形状 {"kind": "decode_failed"|"decoder_unavailable", "detail", "rc", "frames"}。
+        # 为什么单独存一份而不是复用 _ended：ended 在前端是「自然播完，可以跳下一首」
+        # 的边沿；解码失败必须停在这一首并说明原因，两者不能混。
+        self._error: Optional[Dict[str, Any]] = None
         # ------------------------------------------------------------ 独占侧
         # 为什么要有 _dev_lock 这把**独立**的锁：设备流的「开」和「关」必须和泵线程互斥，
         # 但都不能握着 self._lock 做——Initialize/Close 是几十毫秒级的 COM 调用，压在实时
@@ -1492,40 +1497,47 @@ class NativeEngine:
     # ------------------------------------------------------------ 读线程
     def _reader_loop(self, path: str, ss: float, rate: int, ch: int, speed: float,
                      gen: int) -> None:
-        ff = self.ffmpeg_exe()
-        cmd = [ff, "-v", "error"]
-        if ss > 0:
-            cmd += ["-ss", f"{ss:.3f}"]
-        cmd += ["-i", path, "-f", "f32le", "-acodec", "pcm_f32le",
-                "-ac", str(ch), "-ar", str(rate)]
-        # 和 _decode 共用同一份滤镜串：2026-11-06 之前这里只有 atempo，重采样吃的是
-        # swr 默认 16 抽头 —— 「预览测得 20 kHz 平直」并不代表用户播放时也平直。
-        filt = stream_filters(speed, rate)
-        if filt:
-            cmd += ["-filter:a", filt]
-        cmd += ["pipe:1"]
-        _trace("reader-start", file=os.path.basename(path), ss=ss, rate=rate, ch=ch,
-               speed=speed, gen=gen)
         err_lines: "collections.deque[str]" = collections.deque(maxlen=40)
         err_th: Optional[threading.Thread] = None
+        total = 0
+        blocks = 0
         try:
+            ff = self.ffmpeg_exe()
+            cmd = [ff, "-v", "error"]
+            if ss > 0:
+                cmd += ["-ss", f"{ss:.3f}"]
+            cmd += ["-i", path, "-f", "f32le", "-acodec", "pcm_f32le",
+                    "-ac", str(ch), "-ar", str(rate)]
+            # 和 _decode 共用同一份滤镜串：2026-11-06 之前这里只有 atempo，重采样吃的是
+            # swr 默认 16 抽头 —— 「预览测得 20 kHz 平直」并不代表用户播放时也平直。
+            filt = stream_filters(speed, rate)
+            if filt:
+                cmd += ["-filter:a", filt]
+            cmd += ["pipe:1"]
+            _trace("reader-start", file=os.path.basename(path), ss=ss, rate=rate, ch=ch,
+                   speed=speed, gen=gen)
+            # stderr 始终接管道：解码失败时那几行是唯一能说清「为什么」的证据。
+            # 常驻一根 daemon 排空线程，避免管道写满把 ffmpeg 卡住。
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE if _TRACE_ON else subprocess.DEVNULL,
+                                    stderr=subprocess.PIPE,
                                     bufsize=rate * ch * 2,
                                     **_hidden_popen_kwargs())
         except Exception as e:
-            # Popen 失败时这根线程直接死掉，不补 _mark_eof——会让这一曲永远「在播但没数」。
-            # 迹线必须比它先开口，否则事后只能看到一片沉默。
+            # Popen / ffmpeg_exe 失败时这根线程直接死掉；不补这一段，引擎会永远
+            # 「在播但没数」。错的不是用户点了暂停：置 error、不置 ended（见 _fail_segment）。
             _trace("reader-SPAWN-FAIL", gen=gen, err="%s: %s" % (type(e).__name__, e))
-            raise
-        if _TRACE_ON and proc.stderr is not None:
+            self._fail_segment(gen, "decoder_unavailable",
+                               "%s: %s" % (type(e).__name__, e))
+            return
+        err_pipe = getattr(proc, "stderr", None)
+        if err_pipe is not None:
             def _drain_err(pipe) -> None:
                 try:
                     for ln in iter(pipe.readline, b""):
                         err_lines.append(ln.decode("utf-8", "replace").rstrip())
                 except Exception:
                     pass
-            err_th = threading.Thread(target=_drain_err, args=(proc.stderr,),
+            err_th = threading.Thread(target=_drain_err, args=(err_pipe,),
                                       daemon=True, name="salt-ff-err")
             err_th.start()
         # 代际对不上就别登记：这一看就是「上一次 seek/stop 没等到的那根旧线程」，
@@ -1536,8 +1548,6 @@ class NativeEngine:
         frame_bytes = ch * 4
         block = max(1, int(rate * 0.05))            # 50ms 一块
         read_bytes = block * frame_bytes
-        total = 0
-        blocks = 0
         try:
             while not self._stop_evt.is_set():
                 data = proc.stdout.read(read_bytes)
@@ -1556,22 +1566,54 @@ class NativeEngine:
                 proc.stdout.close()
             except Exception:
                 pass
+            stopped = self._stop_evt.is_set() or gen != self._gen
             rc = proc.poll()
-            if rc is None:
-                proc.terminate()
-            self._mark_eof(gen)
-            if _TRACE_ON:
-                tail = "-"
+            killed_by_us = False
+            if rc is None and not stopped:
+                # 自然读完时 stdout 先关、进程可能还差最后几毫秒才退出。先等它拿真退出码；
+                # 贸然 terminate 会把「正常放完」变成非零退出，误报成解码失败。
                 try:
-                    if err_th is not None:
-                        err_th.join(0.3)
-                    tail = " | ".join(list(err_lines)[-8:]) or "-"
+                    rc = proc.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    pass
+            if rc is None:
+                # 停掉的这一段也要收尸：不 wait 就留一个 running 的子进程给 GC。
+                # 但「被我们 terminate 的」退出码不能当解码失败（那会自己制造假错误）。
+                killed_by_us = True
+                try:
+                    proc.terminate()
                 except Exception:
                     pass
+                try:
+                    rc = proc.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    rc = None
+            tail = "-"
+            try:
+                if err_th is not None:
+                    err_th.join(0.3)
+                tail = " | ".join(list(err_lines)[-8:]) or "-"
+            except Exception:
+                pass
+            try:
+                # 排空线程退出后关掉这根管道；线程还活着就不碰（它正用着这个文件对象）。
+                err_pipe = getattr(proc, "stderr", None)
+                if err_pipe is not None and (err_th is None or not err_th.is_alive()):
+                    err_pipe.close()
+            except Exception:
+                pass
+            if not stopped and not killed_by_us and rc not in (0, None):
+                # 解码进程自己死了（坏文件/编码不支持/中途崩溃）。这是错误，不是播完。
+                self._fail_segment(gen, "decode_failed",
+                                   tail if tail != "-" else ("ffmpeg exited %s" % rc),
+                                   rc=rc, frames=total)
+            else:
+                self._mark_eof(gen)
+            if _TRACE_ON:
                 _trace("reader-exit", file=os.path.basename(path), ss=ss, gen=gen,
                        gen_now=self._gen, stop=self._stop_evt.is_set(),
                        rc=rc, bytes=total, blocks=blocks, eof=self._eof,
-                       ended=self._ended, ffmpeg=tail)
+                       ended=self._ended, error=self._error, ffmpeg=tail)
 
     def _feed(self, x: np.ndarray, gen: int) -> bool:
         """把一块解码结果放进环形；返回 False＝「本线程已经过期，该退场了」。
@@ -1632,6 +1674,30 @@ class NativeEngine:
             self._eof = True
             _trace("mark-eof-ACCEPT", gen=gen, avail=self._frames_avail,
                    lim=self._lim_on, paused=self._paused, ended=self._ended)
+            self._cond.notify_all()
+
+    def _fail_segment(self, gen: int, kind: str, detail: str,
+                      rc: Optional[int] = None, frames: int = 0) -> None:
+        """读线程发现「这一段真的坏了」时登记错误，而不是假装播完。
+
+        为什么必须有这一条（2026-11-12 审查 A4/A5）：坏文件/生成失败时旧代码在 finally
+        里照样 _mark_eof()，于是 state() 报 ended=True、playing=False —— 前端那套
+        「wasPlaying && !playing && ended → 自动下一首」的边沿逻辑把它当成正常播完，
+        用户看到的是「歌没播就自己跳走、列表里还没了」。错误必须与「播完」分开：
+        _paused=True（停下来）、_eof 不动（不制造空队列收尾）、_error 记下原因。
+        代际/停止门和 _mark_eof 同款：旧段或用户主动 stop 的那一记不算数。
+        """
+        with self._cond:
+            if gen != self._gen or self._stop_evt.is_set():
+                _trace("reader-error-REJECT", gen=gen, gen_now=self._gen,
+                       stop=self._stop_evt.is_set(), kind=kind)
+                return
+            self._error = {"kind": str(kind), "detail": str(detail)[:500],
+                           "rc": (int(rc) if rc is not None else None),
+                           "frames": int(frames)}
+            self._paused = True
+            _trace("reader-error", gen=gen, kind=kind, rc=rc, frames=frames,
+                   detail=str(detail)[:160])
             self._cond.notify_all()
 
     # ------------------------------------------------------------ 控制
@@ -1812,6 +1878,7 @@ class NativeEngine:
             self._stop_evt.clear(); self._ended = False
             self._paused = False
             self._eof = False
+            self._error = None          # 新一段起播即清错：上一次解码失败不能挂到这一首头上
             self._gen += 1
             gen = self._gen
             self._underruns = 0
@@ -1996,6 +2063,12 @@ class NativeEngine:
         with self._cond:
             _trace("resume", ended=self._ended, paused=self._paused, eof=self._eof,
                    avail=self._frames_avail, gen=self._gen)
+            if self._error is not None:
+                # 上一次解码已经坏了：resume 只解除暂停，管道那头一个字节都不会再来。
+                # 放行等于让界面重新写「正在播放」而进度空转 —— 也就是 A4 那类假播放。
+                # 真要重试，走 play()（它会清 error 并重开解码）。
+                _trace("resume-REJECT-error", kind=self._error.get("kind"))
+                return
             self._paused = False
             self._cond.notify_all()
 
@@ -2040,6 +2113,7 @@ class NativeEngine:
             self._gen += 1
             gen = self._gen
             self._eof = False
+            self._error = None      # 拖动进度条就是「换一个落点重开解码」：旧的失败不再适用
             ff = self._ffmpeg
             if ff and ff.poll() is None:
                 try:
@@ -2076,6 +2150,9 @@ class NativeEngine:
         with self._lock:
             self._paused = True
             self._ended = True
+            # 停止是用户的明确意图，不是「这一段坏了」：清掉解码错误，
+            # 免得下一次 play 之前的面板还挂着上一首的失败横幅（A4/A5）。
+            self._error = None
             # 半路停下时还挂着的「切歌过桥」作废：这一次不是换曲，尾巴由泵退出前的
             # _drain_fadeout 收（它读 _last_out，不受这个标志影响）。
             self._switch_fade = False
@@ -2293,6 +2370,11 @@ class NativeEngine:
                 "out_rate": self._rate, "out_device_index": self._shared_device_index,
                 "ended": self._ended, "mode": self._mode, "native_note": self._native_note,
                 "speed": self._speed,
+                # 解码错误（A4/A5）：None＝没出错。有值时形状
+                # {"kind": "decode_failed"|"decoder_unavailable", "detail", "rc", "frames"}。
+                # 前端靠它说「这首歌放不了」并**停止自动跳曲**——错误和 ended 是两件事，
+                # 混成一个就会复现「没播就自己跳走」。
+                "error": dict(self._error) if self._error else None,
                 # 耳朵里的倍速（atempo 因子串乘积）。前端/闸门拿它和 speed 对：
                 # 不等就是「标 4× 播 2×」那类谎，屏幕上量得到，不靠读代码保证。
                 "atempo": self._atempo,
