@@ -2,10 +2,23 @@
 
 **Windows 本地音乐播放器：WinUI 3 原生外壳 + 本地 Python 音频服务 + WASAPI 输出。**
 
+<p>
+<img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%201809%2B%20%2F%2011%20x64-lightgrey">
+<img alt="license" src="https://img.shields.io/badge/license-GPL--3.0-blue">
+<img alt="output" src="https://img.shields.io/badge/output-WASAPI%20shared%20%2F%20exclusive-informational">
+</p>
+
+*A local music player for Windows: a WinUI 3 shell, a loopback-only Python audio service, and WASAPI output with optional bit-perfect exclusive mode.*
+
 宽屏三栏、原生控件、深浅主题、歌词与歌单、独占输出与逐位直通。只读本机文件：
 不联网、不上传、不抓取音源、不碰 DRM。所有曲库与设置都留在这台机器上。
 
 ![LuHui音乐播放器 主界面](docs/images/home.png)
+
+## 目录
+
+[亮点](#亮点) · [支持的格式](#支持的格式) · [快速开始](#快速开始源码) · [数据放在哪里](#数据放在哪里) ·
+[结构](#结构) · [开发与自检](#开发与自检) · [已知限制](#已知限制) · [许可](#许可)
 
 > 这是按椒盐音乐（Salt Player）的功能与交互**独立重写**的实现，
 > 不含椒盐音乐的任何代码或美术素材，与椒盐音乐官方无关。
@@ -147,3 +160,8 @@ python native\run_native_hidden.py path\to\LuHuiMusic.exe
 
 FFmpeg 二进制不随本仓库提交：`imageio-ffmpeg` 在安装时提供运行时构建，
 其许可取决于具体构建（LGPL 2.1+ 或 GPL 2+）。
+
+## 反馈
+
+提 [Issue](../../issues) 时请附：Windows 版本、播放器版本（或 commit）、声卡/驱动型号、
+是否开了独占模式，以及 `%LOCALAPPDATA%\SaltPlayerPro\crash.log`（出过错才有）。
