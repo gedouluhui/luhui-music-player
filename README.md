@@ -167,3 +167,11 @@ FFmpeg 二进制不随本仓库提交：`imageio-ffmpeg` 在安装时提供运�
 
 提 [Issue](../../issues) 时请附：Windows 版本、播放器版本（或 commit）、声卡/驱动型号、
 是否开了独占模式，以及 `%LOCALAPPDATA%\SaltPlayerPro\crash.log`（出过错才有）。
+
+---
+
+## 同作者的其他项目
+
+- [LuHui播放器](https://github.com/gedouluhui/luhui-player) —— mpv 内核 + 手绘 Fluent 外壳的本地视频播放器
+- [番茄闹钟](https://github.com/gedouluhui/fanqie-alarm) —— 整个应用就是一个 HTML 的番茄钟
+- [pc-phone-proxy](https://github.com/gedouluhui/pc-phone-proxy) —— 电脑 + 安卓双端自动选线代理

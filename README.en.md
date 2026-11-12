@@ -88,3 +88,11 @@ Third-party components: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). FFmpeg
 
 Open an [issue](../../issues) with your Windows version, player version/commit, sound card and driver,
 whether exclusive mode was on, and `%LOCALAPPDATA%\SaltPlayerPro\crash.log` if present.
+
+---
+
+## More from the same author
+
+- [LuHui Player](https://github.com/gedouluhui/luhui-player) — a Windows video player built on mpv with a hand-drawn Fluent UI
+- [Fanqie Alarm](https://github.com/gedouluhui/fanqie-alarm) — a Pomodoro timer that is one HTML file
+- [pc-phone-proxy](https://github.com/gedouluhui/pc-phone-proxy) — auto-selecting proxy for Windows and Android
