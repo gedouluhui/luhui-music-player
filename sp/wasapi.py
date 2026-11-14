@@ -937,54 +937,88 @@ class ExclusiveStream:
         self.waits = 0
         self.wait_failed = 0
 
+    def _init_exclusive(self, packet: int) -> int:
+        """一次 Initialize(EXCLUSIVE|EVENTCALLBACK)。两个 REFERENCE_TIME 必须相同：
+        2026-10-20 本机在 EDIFIER N500 上以 (400000, 100000) 调用时驱动返回
+        AUDCLNT_E_BUFDURATION_PERIOD_NOT_EQUAL，一个字节都没进去。"""
+        return to_hr(_call(self.ac.p, "ac.initialize", ctypes.c_long,
+                           [ctypes.c_int, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong,
+                            ctypes.c_void_p, ctypes.c_void_p],
+                           [AUDCLNT_SHAREMODE_EXCLUSIVE,
+                            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                            packet, packet, ctypes.byref(self.wf), None]))
+
     def open(self) -> Dict[str, Any]:
         com_init(mta=True)
-        self.ac = AudioClient(self.device_id)
-        # 独占＋事件驱动：**缓冲时长必须等于设备包长**。这不是保守选择，是驱动给的原话——
-        # 2026-10-20 00:28 本机默认端点「扬声器 (EDIFIER N500)」上以 (400000, 100000) 调
-        # Initialize，返回 AUDCLNT_E_BUFDURATION_PERIOD_NOT_EQUAL(0x88890013)，一个字节都没进去。
-        # 所以这里两个 REFERENCE_TIME 递**同一个变量**：写开成两个数（哪怕其中一个是另一个的
-        # 整数倍）都会撞那条错误，而自测格子会把「两个数不同」直接判红。
-        packet = self.period_hns
-        hr = to_hr(_call(self.ac.p, "ac.initialize", ctypes.c_long,
-                         [ctypes.c_int, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong,
-                          ctypes.c_void_p, ctypes.c_void_p],
-                         [AUDCLNT_SHAREMODE_EXCLUSIVE,
-                          AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                          packet, packet, ctypes.byref(self.wf), None]))
-        if hr != S_OK:
-            raise WasapiError("Initialize(EXCLUSIVE) 失败：%s（packet=%d）"
-                              % (classify_hr(hr), packet), hr)
-        _, kr = _libs()
-        self.event = kr.CreateEventExW(None, None, 0, EVENT_ALL_ACCESS)
-        if not self.event:
-            raise WasapiError("CreateEventExW 失败（gle=%d）" % ctypes.get_last_error())
-        hr = to_hr(_call(self.ac.p, "ac.set_event_handle", ctypes.c_long,
-                         [ctypes.c_void_p], [self.event]))
-        if hr != S_OK:
-            raise WasapiError("SetEventHandle 失败：%s" % classify_hr(hr), hr)
-        svc = guid_from(IID_IAUDIORENDERCLIENT)
-        pp = ctypes.c_void_p(0)
-        hr = to_hr(_call(self.ac.p, "ac.get_service", ctypes.c_long,
-                         [ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p)],
-                         [ctypes.byref(svc), ctypes.byref(pp)]))
-        if hr != S_OK:
-            raise WasapiError("GetService(IAudioRenderClient) 失败：%s" % classify_hr(hr), hr)
-        self.rc = pp.value
-        n = ctypes.c_uint(0)
-        hr = to_hr(_call(self.ac.p, "ac.get_buffer_size", ctypes.c_long,
-                         [ctypes.POINTER(ctypes.c_uint)], [ctypes.byref(n)]))
-        if hr != S_OK:
-            raise WasapiError("GetBufferSize 失败：%s" % classify_hr(hr), hr)
-        self.buffer_frames = n.value
-        # 一周期多少帧：既然 Initialize 时包长＝缓冲时长（见上），GetBufferSize 报的就是
-        # **一个包能装几帧**，这是驱动自己的数，比我按 100ns 反推的更权威（反推要取整，
-        # 44100 的 10ms 就不是整帧）。所以：驱动给了就用驱动的，没给才回落到算的。
-        calc = block_frames(self.period_hns, int(self.wf.Format.nSamplesPerSec))
-        self.period_frames = int(self.buffer_frames) if self.buffer_frames else calc
-        rec = self.status()
-        rec["period_frames_calc"] = calc
-        return rec
+        # 任何一步失败都必须自己把已经 Activate 的接口/事件还回去：把半开的流抛给
+        # 调用方，等于让「这台设备被一个没人用的独占流占着」。close() 每步都兜异常，
+        # 所以这里的兜底不会盖掉原始错误。
+        try:
+            self.ac = AudioClient(self.device_id)
+            packet = int(self.period_hns)
+            hr = self._init_exclusive(packet)
+            if hr == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED:
+                # 微软 WASAPI 规范：GetBufferSize 报硬件对齐帧数 → 按它重算
+                # 10ms 为单位的 packet → 释放并重建 AudioClient → 二次 Initialize。
+                # 直接用旧 packet 重试只会再撞同一个错误。
+                aligned = ctypes.c_uint(0)
+                hr_buf = to_hr(_call(self.ac.p, "ac.get_buffer_size", ctypes.c_long,
+                                     [ctypes.POINTER(ctypes.c_uint)], [ctypes.byref(aligned)]))
+                first = self.ac
+                self.ac = None
+                try:
+                    first.close()
+                except Exception:
+                    pass
+                if hr_buf != S_OK or aligned.value <= 0:
+                    raise WasapiError("Initialize 对齐重试取 GetBufferSize 失败：%s"
+                                      % classify_hr(hr_buf), hr_buf)
+                rate = max(1, int(self.wf.Format.nSamplesPerSec))
+                packet = int(round((10_000_000.0 * int(aligned.value)) / rate))
+                if packet <= 0:
+                    raise WasapiError("Initialize 对齐重试算出非法 packet=%d" % packet)
+                self.period_hns = packet
+                self.ac = AudioClient(self.device_id)
+                hr = self._init_exclusive(packet)
+            if hr != S_OK:
+                raise WasapiError("Initialize(EXCLUSIVE) 失败：%s（packet=%d）"
+                                  % (classify_hr(hr), packet), hr)
+            _, kr = _libs()
+            self.event = kr.CreateEventExW(None, None, 0, EVENT_ALL_ACCESS)
+            if not self.event:
+                raise WasapiError("CreateEventExW 失败（gle=%d）" % ctypes.get_last_error())
+            hr = to_hr(_call(self.ac.p, "ac.set_event_handle", ctypes.c_long,
+                             [ctypes.c_void_p], [self.event]))
+            if hr != S_OK:
+                raise WasapiError("SetEventHandle 失败：%s" % classify_hr(hr), hr)
+            svc = guid_from(IID_IAUDIORENDERCLIENT)
+            pp = ctypes.c_void_p(0)
+            hr = to_hr(_call(self.ac.p, "ac.get_service", ctypes.c_long,
+                             [ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p)],
+                             [ctypes.byref(svc), ctypes.byref(pp)]))
+            if hr != S_OK:
+                raise WasapiError("GetService(IAudioRenderClient) 失败：%s" % classify_hr(hr), hr)
+            self.rc = pp.value
+            n = ctypes.c_uint(0)
+            hr = to_hr(_call(self.ac.p, "ac.get_buffer_size", ctypes.c_long,
+                             [ctypes.POINTER(ctypes.c_uint)], [ctypes.byref(n)]))
+            if hr != S_OK:
+                raise WasapiError("GetBufferSize 失败：%s" % classify_hr(hr), hr)
+            self.buffer_frames = n.value
+            # 一周期多少帧：既然 Initialize 时包长＝缓冲时长（见上），GetBufferSize 报的就是
+            # **一个包能装几帧**，这是驱动自己的数，比我按 100ns 反推的更权威（反推要取整，
+            # 44100 的 10ms 就不是整帧）。所以：驱动给了就用驱动的，没给才回落到算的。
+            calc = block_frames(self.period_hns, int(self.wf.Format.nSamplesPerSec))
+            self.period_frames = int(self.buffer_frames) if self.buffer_frames else calc
+            rec = self.status()
+            rec["period_frames_calc"] = calc
+            return rec
+        except Exception:
+            try:
+                self.close()
+            except Exception:
+                pass
+            raise
 
     def status(self) -> Dict[str, Any]:
         return {"mode": "exclusive", "started": self.started,

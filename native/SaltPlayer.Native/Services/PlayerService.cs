@@ -53,6 +53,21 @@ public sealed class PlayerService
 
     public event Action? Changed;
     public event Action<string>? ErrorOccurred;
+    /// <summary>Non-fatal backend notices (exclusive fallback, device released, …).</summary>
+    public event Action<string>? NoticeOccurred;
+    private string? _lastNotice;
+
+    private void RaiseNotice(string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note))
+        {
+            _lastNotice = null;
+            return;
+        }
+        if (string.Equals(note, _lastNotice, StringComparison.Ordinal)) return;
+        _lastNotice = note;
+        NoticeOccurred?.Invoke(note);
+    }
 
     // 诊断迹线：SALTPLAYER_NATIVE_TRACE=<文件> 时把每次动作与轮询判定写进同一个迹线文件
     // （MainWindow.Trace 的 sink，前缀 [svc]）。环境变量为空 ⇒ 全部调用直接返回。
@@ -173,6 +188,7 @@ public sealed class PlayerService
                 pos = position,
             }).ConfigureAwait(true);
             Trace($"play-resp ok={st.Ok} playing={st.Playing} ended={st.Ended} pos={st.Position:F2} dur={st.Duration:F2} mode={st.Mode} err={st.Error ?? "-"} note={st.NativeNote ?? "-"}");
+            RaiseNotice(st.NativeNote);
             if (st.Ok == false)
             {
                 LastError = st.Error ?? st.NativeNote ?? "无法开始播放";
@@ -511,7 +527,8 @@ public sealed class PlayerService
                 Trace($"poll-notok err={st.Error}");
                 return;
             }
-            Trace($"poll playing={st.Playing} ended={st.Ended} pos={st.Position:F2}/{st.Duration:F2} underruns={st.Underruns} mode={st.Mode}");
+            Trace($"poll playing={st.Playing} ended={st.Ended} pos={st.Position:F2}/{st.Duration:F2} underruns={st.Underruns} mode={st.Mode} note={st.NativeNote ?? "-"}");
+            RaiseNotice(st.NativeNote);
             var wasPlaying = IsPlaying;
             IsPlaying = st.Playing && !st.Ended;
             Position = Math.Max(0, st.Position);

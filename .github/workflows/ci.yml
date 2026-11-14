@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python-tests:
+    name: Python regression tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      # 测试只需要解码/元数据/封面这三条链上的纯 Python 依赖；PyAudioWPatch 与
+      # imageio-ffmpeg 在 sp.audioplay 里都是 guarded import（CI 里没有声卡也不会真播）。
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest numpy scipy mutagen Pillow
+      - name: Run offline regression suites
+        run: python -m pytest tests -q
+
+  winui-build:
+    name: WinUI shell build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build LuHuiMusic.exe (Release)
+        run: dotnet build native/SaltPlayer.Native/SaltPlayer.Native.csproj -c Release -v minimal

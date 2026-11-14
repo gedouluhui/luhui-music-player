@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from . import db
 from .config import AUDIO_EXTS, normalize_path
-from .metadata import read_track_metadata
+from .metadata import cover_cache_trim, read_track_metadata
 
 JUNK_DIRS = {
     "$recycle.bin", "system volume information", "#recycle", "@eadir", ".ds_store",
@@ -72,8 +72,13 @@ def is_junk_dir(name: str) -> bool:
 
 
 def walk_audio(root: str, max_files: int = 200_000,
-               blacklist: Optional[List[str]] = None) -> List[str]:
+               blacklist: Optional[List[str]] = None) -> tuple[List[str], bool]:
     """收集 root 下的音频文件；blacklist 里的目录（含其子树）整个跳过。
+
+    返回 ``(files, complete)``。``complete`` 为 False 表示这次遍历**没有看全**：
+    有目录无权限、或命中 max_files 截断。调用方拿到不完整清单时绝不能拿它做
+    「不在清单里的都标失效」的判定 —— 否则一次 U 盘掉线/权限错误就会把整库曲目
+    打进 missing，收藏和统计跟着一起塌。
 
     命中黑名单时是在 dirpath 这一层直接 continue，所以「这个目录自己的文件」和
     「它下面的子目录」一起被跳过 —— 这正是用户点「不再扫描此文件夹」想要的效果。
@@ -81,8 +86,11 @@ def walk_audio(root: str, max_files: int = 200_000,
     found: List[str] = []
     seen_dirs = set()
     bl = [b for b in (blacklist or []) if b]
+    complete = True
 
     def onerr(err: OSError) -> None:
+        nonlocal complete
+        complete = False
         _note_error(f"跳过无权限目录: {getattr(err, 'filename', err)}")
 
     for dirpath, dirnames, filenames in os.walk(root, onerror=onerr, followlinks=False):
@@ -114,9 +122,10 @@ def walk_audio(root: str, max_files: int = 200_000,
                 p = p[4:]
             found.append(p)
             if len(found) >= max_files:
-                _note_error("曲库文件数超过上限 200000，已截断")
-                return found
-    return found
+                _note_error(f"曲库文件数超过上限 {max_files}，已截断")
+                complete = False
+                return found, complete
+    return found, complete
 
 
 def scan_library(library_id: Optional[int] = None, include_unsupported: bool = False,
@@ -132,26 +141,41 @@ def scan_library(library_id: Optional[int] = None, include_unsupported: bool = F
     try:
         grand = {"added": 0, "updated": 0, "removed": 0, "skipped": 0}
         total_files = 0
-        per_lib: Dict[int, List[str]] = {}
+        per_lib: Dict[int, tuple[List[str], bool]] = {}
         for lib in targets:
             if not os.path.isdir(lib["path"]):
                 _note_error(f"文件夹不存在: {lib['path']}")
                 continue
             t0 = time.time()
-            files = walk_audio(lib["path"], blacklist=bl)
-            per_lib[lib["id"]] = files
+            files, complete = walk_audio(lib["path"], blacklist=bl)
+            per_lib[lib["id"]] = (files, complete)
             total_files += len(files)
             with _STATE_LOCK:
                 STATE["total"] = total_files
             _set(current=f"已找到 {len(files)} 个音频文件 ({lib['name']}) · {time.time() - t0:.1f}s")
         known = _known_index()
         for lib in targets:
-            files = per_lib.get(lib["id"])
-            if files is None:
+            entry = per_lib.get(lib["id"])
+            if entry is None:
                 continue
+            files, complete = entry
             _ingest(lib, files, known, include_unsupported, grand, force)
-            removed = _reconcile(lib, files, grand)
+            if not complete:
+                # 残缺清单只能用来「加/更新」，不能用来判定谁不见了。
+                _note_error(f"跳过失效标记: {lib['name']} 本轮遍历不完整（无权限或被截断）")
+                continue
+            if not files and not force and db.track_count(["library_id = ?"], [lib["id"]]) >= 10:
+                # 盘没挂载、路径暂时不可见都会让本轮只有 0 个文件。整库 ≥10 首时
+                # 这种「全空」更可能是环境问题而不是用户真删光了；force 可显式覆盖。
+                _note_error(f"跳过失效标记: {lib['name']} 本轮扫描到 0 个文件（可能是磁盘未挂载）")
+                continue
+            _reconcile(lib, files, grand)
         db.set_meta("last_scan_at", time.time())
+        # 派生封面只增不减；扫描收尾顺手把目录压回配额。失败绝不能让扫描报错。
+        try:
+            cover_cache_trim()
+        except Exception:
+            pass
         _set(phase="done", current="", **grand)
         STATE["running"] = False
         STATE["finished_at"] = time.time()

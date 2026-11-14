@@ -621,16 +621,33 @@ class NativeEngine:
         （手写 COM 虚表读 PKEY_Device_FriendlyName vs PortAudio 自己的枚举）在本机量过
         名字多重集相同（`python -X utf8 -m sp.wasapi --names` 的 cross_source.agree=true）。
         对不上的行留 None ⇒ 独占协商会如实回「这台设备对不上 COM 端点」并回落共享，
-        不拿「大概是同一台」当证据。
+        不拿「大概是同一台」当证据。**重名一律不匹配**：两台同款 USB DAC 在两侧
+        都叫同一个友好名时，按名字选一台就是赌——赌错会把声音送到另一台设备。
         """
         eps = _wasapi_endpoints()
         by_name: Dict[str, str] = {}
+        seen_eps: Dict[str, int] = {}
         for e in eps:
             nm = str(e.get("name") or "").strip()
-            if nm and nm not in by_name:
+            if not nm:
+                continue
+            seen_eps[nm] = seen_eps.get(nm, 0) + 1
+            # 只有全表唯一的名字才敢先记一个 id；同名第二台出现时把这条划掉。
+            if seen_eps[nm] == 1:
                 by_name[nm] = e.get("id") or ""
+            else:
+                by_name.pop(nm, None)
+        seen_rows: Dict[str, int] = {}
         for r in rows:
-            r["wasapi_id"] = by_name.get(str(r.get("name") or "").strip()) or None
+            nm = str(r.get("name") or "").strip()
+            seen_rows[nm] = seen_rows.get(nm, 0) + 1
+        for r in rows:
+            nm = str(r.get("name") or "").strip()
+            # 两台同款 USB DAC 在两端都叫同一个名字时，按名字只能二选一；
+            # 错配等于把声音送到另一台设备，比「这台暂不支持独占」更糟。
+            # 行侧或端点侧任一侧出现重名 ⇒ 不做名字匹配，留给共享输出。
+            unique = bool(nm) and seen_eps.get(nm, 0) == 1 and seen_rows.get(nm, 0) == 1
+            r["wasapi_id"] = (by_name.get(nm) or None) if unique else None
 
     # --------------------------------------------------------------- 离线预览
     def preview(self, path: str, seconds: float = 2.0, *, ss: float = 0.0,
@@ -1559,6 +1576,11 @@ class NativeEngine:
                 if x.size % ch:
                     x = x[:x.size - (x.size % ch)]
                 x = x.reshape(-1, ch)
+                # 独占直通不走 TruePeakLimiter；一个 NaN/Inf 会被原样 memmove 进声卡
+                # 缓冲，轻则爆音重则让驱动静音。共享档也在限幅器之前先在这里收口，
+                # 两档用同一条净化判据：坏样本→静音、Inf→满幅。
+                if not np.all(np.isfinite(x)):
+                    x = np.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
                 if not self._feed(x, gen):
                     break
         finally:

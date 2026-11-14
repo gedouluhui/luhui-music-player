@@ -311,9 +311,8 @@ def remove_library(library_id: int, keep_tracks: bool = False) -> None:
     if keep_tracks:
         write("UPDATE tracks SET library_id = NULL WHERE library_id = ?", (library_id,))
     else:
-        ids = [r["id"] for r in query("SELECT id FROM tracks WHERE library_id = ?", (library_id,))]
-        for tid in ids:
-            delete_track_refs(tid)
+        ids = [int(r["id"]) for r in query("SELECT id FROM tracks WHERE library_id = ?", (library_id,))]
+        delete_track_refs_many(ids)
         write("DELETE FROM tracks WHERE library_id = ?", (library_id,))
     write("DELETE FROM libraries WHERE id = ?", (library_id,))
 
@@ -404,12 +403,30 @@ def upsert_track(data: Dict[str, Any]) -> int:
     return int(r["id"]) if r else 0
 
 
+_SQL_CHUNK = 500          # SQLite 老构建的参数上限是 999，500 留足余量
+
+
 def delete_track_refs(track_id: int) -> None:
-    script(
-        f"DELETE FROM playlist_items WHERE track_id = {int(track_id)};"
-        f"DELETE FROM favorites WHERE track_id = {int(track_id)};"
-        f"DELETE FROM plays WHERE track_id = {int(track_id)};"
-    )
+    delete_track_refs_many([track_id])
+
+
+def delete_track_refs_many(track_ids: Iterable[int]) -> None:
+    """一次事务清掉一批曲目的歌单项/收藏/播放记录。
+
+    以前是每首一条 executescript（各自 commit）：删一个一千首的库就是三千次 WAL
+    落盘。按 500 个 id 一批拼 IN，整批走 batch() 一个事务。
+    """
+    ids = [int(t) for t in track_ids]
+    if not ids:
+        return
+    stmts: List[tuple] = []
+    for i in range(0, len(ids), _SQL_CHUNK):
+        chunk = ids[i:i + _SQL_CHUNK]
+        ph = ",".join("?" * len(chunk))
+        stmts.append((f"DELETE FROM playlist_items WHERE track_id IN ({ph})", chunk))
+        stmts.append((f"DELETE FROM favorites WHERE track_id IN ({ph})", chunk))
+        stmts.append((f"DELETE FROM plays WHERE track_id IN ({ph})", chunk))
+    batch(stmts)
 
 
 def mark_missing_not_in(paths: Iterable[str], library_id: Optional[int] = None) -> List[int]:
@@ -418,18 +435,23 @@ def mark_missing_not_in(paths: Iterable[str], library_id: Optional[int] = None) 
     rows = query(sql, (library_id,) if library_id else ())
     gone = [int(r["id"]) for r in rows if r["path"] not in keep]
     if gone:
-        # 原来一首一首 write()，删一千首就是一千次 commit；现在一条 UPDATE ... IN 解决。
-        ph = ",".join("?" * len(gone))
-        write(f"UPDATE tracks SET missing = 1 WHERE id IN ({ph})", gone)
+        # 一条 UPDATE ... IN 比一千条 write() 快得多，但参数个数也有上限：分块后
+        # 整批放进同一个事务，既不会撞 SQLite 的变量上限，也不会变成一千次提交。
+        stmts = []
+        for i in range(0, len(gone), _SQL_CHUNK):
+            chunk = gone[i:i + _SQL_CHUNK]
+            ph = ",".join("?" * len(chunk))
+            stmts.append((f"UPDATE tracks SET missing = 1 WHERE id IN ({ph})", chunk))
+        batch(stmts)
     return gone
 
 
 def purge_missing() -> int:
     rows = query("SELECT id FROM tracks WHERE missing = 1")
-    for r in rows:
-        delete_track_refs(int(r["id"]))
+    ids = [int(r["id"]) for r in rows]
+    delete_track_refs_many(ids)
     write("DELETE FROM tracks WHERE missing = 1")
-    return len(rows)
+    return len(ids)
 
 
 def get_track(track_id: int) -> Optional[Dict[str, Any]]:

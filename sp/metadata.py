@@ -17,6 +17,15 @@ from pathlib import Path
 
 from .config import AUDIO_EXTS, COVER_NAMES, IMAGE_EXTS, LYRIC_EXTS, data_root
 
+try:
+    from PIL import Image as _PILImage
+    # Pillow 默认的 89 MP 阈值太高：一张 12000×12000 的 PNG 解码就要 ~576 MB，
+    # 而扫描器会为每个文件尝试解码封面 —— 一个坏封面就能把整台机器拖进交换。
+    # 真实专辑封面远小于 25 MP（5000×5000），超过它基本可以判定是解压炸弹。
+    _PILImage.MAX_IMAGE_PIXELS = 25_000_000
+except Exception:
+    pass
+
 # Formats Chromium's <audio> element can actually decode (wma/ape/dsf/tak/wv cannot).
 PLAYABLE = {
     ".mp3", ".flac", ".m4a", ".mp4", ".aac", ".wav", ".ogg", ".oga", ".opus",
@@ -33,6 +42,68 @@ def cover_cache_dir() -> Path:
     d = data_root() / "covers"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+# 封面派生图只增不减：v96_/v240_/v640_ 各尺寸 + gen_ 色块，扫几万首就能堆到
+# 好几个 GB，而且永远没人回收。500 MiB 对普通曲库绰绰有余；超了就按 mtime
+# 从旧到新淘汰（最近播放/浏览过的封面会保持热）。
+COVER_CACHE_MAX_BYTES = 500 * 1024 * 1024
+_STALE_TMP_SECONDS = 3600
+
+
+def cover_cache_trim(max_bytes: Optional[int] = None) -> Dict[str, int]:
+    """把 covers 目录压回配额以内；返回 {files, bytes, removed, freed}。
+
+    只在扫描收尾调用（不放进每个封面请求里）：一次 iterdir + stat 就够便宜，
+    但放热路径上就是每次请求多一次全目录遍历。
+    """
+    limit = COVER_CACHE_MAX_BYTES if max_bytes is None else max(0, int(max_bytes))
+    try:
+        d = cover_cache_dir()
+    except Exception:
+        return {"files": 0, "bytes": 0, "removed": 0, "freed": 0}
+
+    now = time.time()
+    entries = []
+    total = 0
+    try:
+        children = list(d.iterdir())
+    except OSError:
+        children = []
+    for p in children:
+        try:
+            if not p.is_file():
+                continue
+            st = p.stat()
+        except OSError:
+            continue
+        if p.name.endswith(".tmp"):
+            # 崩溃/并发留下的半成品：一小时后清掉，不参与配额统计（它们不是可复用缓存）。
+            if now - st.st_mtime > _STALE_TMP_SECONDS:
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+            continue
+        entries.append((st.st_mtime, st.st_size, p))
+        total += st.st_size
+
+    removed = 0
+    freed = 0
+    if total > limit:
+        entries.sort(key=lambda t: t[0])          # 最旧的先走
+        for _mtime, size, p in entries:
+            if total <= limit:
+                break
+            try:
+                p.unlink()
+            except OSError:
+                continue
+            total -= size
+            removed += 1
+            freed += size
+    return {"files": len(entries) - removed, "bytes": total,
+            "removed": removed, "freed": freed}
 
 
 # 封面派生尺寸。列表行里的图只有 44~120 px，却被要求下载整张内嵌封面

@@ -12,18 +12,18 @@ internal sealed class MediaSession : IDisposable
     private readonly SystemMediaTransportControls _smtc;
     private readonly PlayerService _player;
     private readonly DispatcherQueue _dispatcher;
-    private readonly Func<long, string> _coverUrl;
+    private readonly ApiClient _api;
 
     private long _metaTrackId = -1;
     private double _lastTimeline = double.NaN;
     private double _lastDuration = double.NaN;
     private bool _disposed;
 
-    public MediaSession(IntPtr hwnd, DispatcherQueue dispatcher, PlayerService player, Func<long, string> coverUrl)
+    public MediaSession(IntPtr hwnd, DispatcherQueue dispatcher, PlayerService player, ApiClient api)
     {
         _dispatcher = dispatcher;
         _player = player;
-        _coverUrl = coverUrl;
+        _api = api;
 
         _smtc = SystemMediaTransportControlsInterop.GetForWindow(hwnd);
         _smtc.IsEnabled = true;
@@ -108,23 +108,61 @@ internal sealed class MediaSession : IDisposable
             music.Artist = track.ArtistText;
             music.AlbumTitle = track.AlbumText;
             music.AlbumArtist = string.IsNullOrWhiteSpace(track.AlbumArtist) ? track.ArtistText : track.AlbumArtist!;
-            try
-            {
-                updater.Thumbnail = RandomAccessStreamReference.CreateFromUri(new Uri(_coverUrl(track.Id)));
-            }
-            catch
-            {
-                updater.Thumbnail = null;
-            }
+            updater.Thumbnail = null;
             updater.Update();
+            // SMTC's own background process cannot attach X-Salt-Token to a URI. Fetch
+            // the bytes through the authenticated ApiClient and hand over a stream.
+            _ = UpdateCoverAsync(track.Id, updater);
         }
         catch { }
+    }
+
+    private async Task UpdateCoverAsync(long trackId, SystemMediaTransportControlsDisplayUpdater updater)
+    {
+        try
+        {
+            var bytes = await _api.GetBytesAsync(
+                $"cover?track_id={trackId}&size=art").ConfigureAwait(false);
+            if (_disposed || bytes is null || bytes.Length == 0 || trackId != _metaTrackId) return;
+
+            var ras = new InMemoryRandomAccessStream();
+            using (var writer = new DataWriter(ras.GetOutputStreamAt(0)))
+            {
+                writer.WriteBytes(bytes);
+                await writer.StoreAsync().AsTask().ConfigureAwait(false);
+                await writer.FlushAsync().AsTask().ConfigureAwait(false);
+                writer.DetachStream();
+            }
+            ras.Seek(0);
+            _dispatcher.TryEnqueue(() =>
+            {
+                if (_disposed || trackId != _metaTrackId)
+                {
+                    ras.Dispose();
+                    return;
+                }
+                try
+                {
+                    updater.Thumbnail = RandomAccessStreamReference.CreateFromStream(ras);
+                    updater.Update();
+                }
+                catch
+                {
+                    ras.Dispose();
+                }
+            });
+        }
+        catch
+        {
+            // Cover art is decoration; never let it take playback down.
+        }
     }
 
     private void OnButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args)
     {
         _dispatcher.TryEnqueue(async () =>
         {
+            if (_disposed) return;
             try
             {
                 switch (args.Button)
@@ -152,6 +190,7 @@ internal sealed class MediaSession : IDisposable
         var seconds = args.RequestedPlaybackPosition.TotalSeconds;
         _dispatcher.TryEnqueue(async () =>
         {
+            if (_disposed) return;
             try { await _player.SeekAsync(seconds); }
             catch { }
         });
@@ -162,6 +201,7 @@ internal sealed class MediaSession : IDisposable
         var want = args.RequestedShuffleEnabled;
         _dispatcher.TryEnqueue(async () =>
         {
+            if (_disposed) return;
             try
             {
                 if (want && _player.PlayMode != "shuffle")
@@ -184,6 +224,7 @@ internal sealed class MediaSession : IDisposable
         if (mode is null) return;
         _dispatcher.TryEnqueue(async () =>
         {
+            if (_disposed) return;
             try { await _player.SetPlayModeAsync(mode); }
             catch { }
         });

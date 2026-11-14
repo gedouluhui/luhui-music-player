@@ -1064,6 +1064,10 @@ def run_server_only(print_url: bool = True, port: Optional[int] = None) -> int:
     db.conn()
     server = api.Server(port)
     url = server.start()
+    # 原生壳的端口握手：Shell 传 --port 0，由本进程原子地绑定临时端口，再把真实
+    # 端口用这一行报回去。让 Shell 先 PickFreePort 再交给子进程，中间那段窗口
+    # 会被别的进程抢走（抢到后子进程绑定失败，界面表现为「后端启动失败」）。
+    print(f"SALTPLAYER_PORT={server.port}", flush=True)
     api.WINDOW_HOOKS.update({k: (lambda *a, **k: {"ok": False})
                              for k in ("focus", "show", "theme", "about", "quit", "mini")})
     # 浏览器/无头模式没有原生药丸：让 GET /api/mini/state 明确回「这条通道不存在」。

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace SaltPlayer.Native.Services;
@@ -12,18 +13,26 @@ namespace SaltPlayer.Native.Services;
 /// </summary>
 public sealed class BackendService : IDisposable
 {
-    private readonly HttpClient _probe = new() { Timeout = TimeSpan.FromSeconds(2) };
+    private readonly HttpClient _probe;
     private Process? _process;
+    private IntPtr _job;
     private StreamWriter? _log;
     private readonly object _logLock = new();
     private bool _disposed;
 
     public string BaseUrl { get; private set; } = "";
+    /// <summary>Per-launch shared secret. Empty when attached to an external backend.</summary>
+    public string ApiToken { get; private set; } = "";
     public bool Owned { get; private set; }
     public string? LastError { get; private set; }
     public string LogPath { get; } = Path.Combine(Path.GetTempPath(), "SaltPlayer.Native", "backend.log");
     public string? BackendRoot { get; private set; }
     public string? PythonPath { get; private set; }
+
+    public BackendService()
+    {
+        _probe = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+    }
 
     public async Task<bool> StartAsync(CancellationToken ct = default)
     {
@@ -34,6 +43,14 @@ public sealed class BackendService : IDisposable
             BaseUrl = external.TrimEnd('/');
             Owned = false;
             return await WaitHealthyAsync(TimeSpan.FromSeconds(8), ct).ConfigureAwait(false);
+        }
+
+        // One token per owned backend. The page never sees it; ApiClient sends it as a
+        // header, and only the cover/stream image URLs carry it as a query parameter.
+        if (ApiToken.Length == 0)
+        {
+            ApiToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
+            _probe.DefaultRequestHeaders.TryAddWithoutValidation("X-Salt-Token", ApiToken);
         }
 
         BackendRoot = FindBackendRoot();
@@ -56,12 +73,13 @@ public sealed class BackendService : IDisposable
         for (var attempt = 0; attempt < 3; attempt++)
         {
             ct.ThrowIfCancellationRequested();
-            var port = PickFreePort();
-            if (!Spawn(port))
+            var spawn = await SpawnAsync(ct).ConfigureAwait(false);
+            if (!spawn.Ok)
             {
+                StopProcess();
                 continue;
             }
-            BaseUrl = $"http://127.0.0.1:{port}";
+            BaseUrl = $"http://127.0.0.1:{spawn.Port}";
             if (await WaitHealthyAsync(TimeSpan.FromSeconds(45), ct).ConfigureAwait(false))
             {
                 Owned = true;
@@ -78,13 +96,18 @@ public sealed class BackendService : IDisposable
         return false;
     }
 
-    private bool Spawn(int port)
+    /// <summary>
+    /// Spawns salt_player.py with --port 0 and waits for it to report the real port.
+    /// Keeping port selection inside the child removes the PickFreePort race: another
+    /// process can grab a port between "probe it" and "bind it".
+    /// </summary>
+    private async Task<(bool Ok, int Port)> SpawnAsync(CancellationToken ct)
     {
         var script = Path.Combine(BackendRoot!, "salt_player.py");
         var psi = new ProcessStartInfo
         {
             FileName = PythonPath!,
-            Arguments = $"\"{script}\" --server --port {port}",
+            Arguments = $"\"{script}\" --server --port 0",
             WorkingDirectory = BackendRoot!,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -98,7 +121,9 @@ public sealed class BackendService : IDisposable
         psi.Environment["PYTHONUTF8"] = "1";
         psi.Environment["PYTHONUNBUFFERED"] = "1";
         psi.Environment["SALTPLAYER_NATIVE_SHELL"] = "1";
+        psi.Environment["SALTPLAYER_API_TOKEN"] = ApiToken;
 
+        var handshake = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
             lock (_logLock)
@@ -108,25 +133,53 @@ public sealed class BackendService : IDisposable
                 _log.WriteLine($"===== {DateTime.Now:O} spawn {PythonPath} {psi.Arguments} (cwd={BackendRoot}) =====");
             }
             var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
-            p.OutputDataReceived += (_, e) => AppendLog("out", e.Data);
+            p.OutputDataReceived += (_, e) =>
+            {
+                AppendLog("out", e.Data);
+                const string marker = "SALTPLAYER_PORT=";
+                if (e.Data is string line && line.StartsWith(marker, StringComparison.Ordinal) &&
+                    int.TryParse(line.AsSpan(marker.Length).Trim(), out var reported) &&
+                    reported is > 0 and <= 65535)
+                {
+                    handshake.TrySetResult(reported);
+                }
+            };
             p.ErrorDataReceived += (_, e) => AppendLog("err", e.Data);
             p.Exited += (_, _) => AppendLog("sys", $"backend exited code={SafeExitCode(p)}");
             if (!p.Start())
             {
                 LastError = "后端进程未能启动";
-                return false;
+                return (false, 0);
             }
             p.BeginOutputReadLine();
             p.BeginErrorReadLine();
             _process = p;
-            LastError = null;
-            return true;
+            _job = JobObjectHelper.Attach(p);
+            if (_job == IntPtr.Zero)
+            {
+                AppendLog("sys", "job-object attach failed; backend will survive a hard shell kill");
+            }
+
+            try
+            {
+                var port = await handshake.Task
+                    .WaitAsync(TimeSpan.FromSeconds(20), ct)
+                    .ConfigureAwait(false);
+                LastError = null;
+                return (true, port);
+            }
+            catch (TimeoutException)
+            {
+                LastError = "后端未在 20 秒内报告监听端口，日志：" + LogPath;
+                AppendLog("sys", LastError);
+                return (false, 0);
+            }
         }
         catch (Exception e)
         {
             LastError = "后端启动异常：" + e.Message;
             AppendLog("sys", LastError);
-            return false;
+            return (false, 0);
         }
     }
 
@@ -197,15 +250,6 @@ public sealed class BackendService : IDisposable
         catch
         {
         }
-    }
-
-    private static int PickFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 
     private static string? FindBackendRoot()
@@ -311,6 +355,8 @@ public sealed class BackendService : IDisposable
         finally
         {
             p.Dispose();
+            JobObjectHelper.Close(_job);
+            _job = IntPtr.Zero;
         }
     }
 
@@ -319,6 +365,8 @@ public sealed class BackendService : IDisposable
         if (_disposed) return;
         _disposed = true;
         if (Owned) StopProcess();
+        JobObjectHelper.Close(_job);
+        _job = IntPtr.Zero;
         _probe.Dispose();
         lock (_logLock)
         {

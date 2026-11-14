@@ -5,6 +5,7 @@ no other network surface.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import mimetypes
 import os
@@ -30,6 +31,15 @@ MIME_BY_EXT = {
     ".aac": "audio/aac", ".wav": "audio/wav", ".ogg": "audio/ogg", ".oga": "audio/ogg",
     ".opus": "audio/ogg", ".aif": "audio/aiff", ".aiff": "audio/aiff", ".wma": "audio/x-ms-wma",
 }
+# 4 MiB 足够容纳整份歌词（最大 1 MiB base64 上限的 4 倍）、队列与设置；
+# 超过就不读直接 413 —— 之前是照 Content-Length 全量读进内存再丢，一个坏
+# 客户端能按住一条线程并吃光内存。
+MAX_BODY_BYTES = 4 * 1024 * 1024
+
+
+class _PayloadTooLarge(Exception):
+    """Content-Length 超过 MAX_BODY_BYTES；在读取正文之前抛出。"""
+
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "theme": "dark",
     "accent_mode": "cover",          # cover | preset
@@ -437,13 +447,17 @@ class Handler(BaseHTTPRequestHandler):
                 pass
 
     def _guard(self) -> bool:
-        """Host/Origin 白名单：挡住 DNS rebinding 与浏览器跨站调用。
+        """Host/Origin 白名单 + 原生壳启动令牌。
 
-        威胁模型是「用户浏览器里的任意网页」：同用户的本机进程本来就能直接读曲库，
-        不是这一层能解决的；这里要关的是网页把 127.0.0.1 当成自家源来读写的那条路。
+        威胁模型是「用户浏览器里的任意网页」与「同用户的其他本机进程」：
         - Host 必须是本机回环 + 本服务端口。DNS rebinding 请求带的是攻击者域名，被挡。
         - 带 Origin 的请求必须是本应用自己的页面；没带 Origin 的（curl / 原生壳 /
-          同源导航）不是浏览器跨站请求，放行。
+          同源导航）不是浏览器跨站请求。
+        - 原生壳启动后端时注入 SALTPLAYER_API_TOKEN；设了令牌就对所有 /api/* 强制
+          比对（常数时间）。独立运行（Qt 壳/浏览器）没有这个环境变量 ⇒ 行为不变。
+          <img>/<audio> 不能带自定义头，所以**仅** /api/cover 与 /api/stream 的 GET/HEAD
+          允许用 ?token= 传同一串令牌；其他端点只认 X-Salt-Token，避免把令牌散进
+          书签/日志/Referer。
         """
         port = int(getattr(self.server, "server_port", 0) or 0)
         allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
@@ -457,6 +471,21 @@ class Handler(BaseHTTPRequestHandler):
             if origin not in allowed_origins:
                 self._json({"error": "forbidden origin"}, 403)
                 return False
+
+        token = (os.environ.get("SALTPLAYER_API_TOKEN") or "").strip()
+        if not token:
+            return True
+        parsed = urllib.parse.urlparse(self.path)
+        if not parsed.path.startswith("/api/"):
+            return True
+        supplied = self.headers.get("X-Salt-Token") or ""
+        if (not supplied and self.command in ("GET", "HEAD")
+                and (parsed.path.startswith("/api/cover")
+                     or parsed.path.startswith("/api/stream/"))):
+            supplied = (urllib.parse.parse_qs(parsed.query).get("token") or [""])[0]
+        if not hmac.compare_digest(supplied.encode("utf-8"), token.encode("utf-8")):
+            self._json({"error": "forbidden token"}, 403)
+            return False
         return True
 
     def _json(self, obj: Any, code: int = 200) -> None:
@@ -511,6 +540,8 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             n = 0
+        if n > MAX_BODY_BYTES:
+            raise _PayloadTooLarge(n)
         if n <= 0:
             return {}
         raw = self.rfile.read(n)
@@ -543,10 +574,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._static(path)
         except BrokenPipeError:
             pass
-        except Exception as e:
+        except Exception:
+            # 详情只进本地 stderr 日志；响应里不回异常文本（可能带绝对路径/内部状态）。
             import traceback
             traceback.print_exc()
-            return self._json({"error": f"{type(e).__name__}: {e}", "path": path}, 500)
+            return self._json({"error": "internal error"}, 500)
 
     def _get_api(self, path: str, q: Dict[str, str]) -> None:
         if path == "/api/bootstrap":
@@ -787,12 +819,15 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         try:
             return self._post_api(parsed.path, self._body())
+        except _PayloadTooLarge:
+            self.close_connection = True
+            return self._json({"error": "payload too large", "limit": MAX_BODY_BYTES}, 413)
         except BrokenPipeError:
             pass
-        except Exception as e:
+        except Exception:
             import traceback
             traceback.print_exc()
-            return self._json({"error": f"{type(e).__name__}: {e}"}, 500)
+            return self._json({"error": "internal error"}, 500)
 
     do_PUT = do_PATCH = do_POST
 
@@ -800,7 +835,11 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard():
             return
         parsed = urllib.parse.urlparse(self.path)
-        body = dict(self._body())
+        try:
+            body = dict(self._body())
+        except _PayloadTooLarge:
+            self.close_connection = True
+            return self._json({"error": "payload too large", "limit": MAX_BODY_BYTES}, 413)
         if parsed.path.startswith("/api/playlists/"):
             body["id"] = int(re.findall(r"\d+", parsed.path)[-1])
             return self._post_api("/api/playlists/delete", body)
@@ -1640,8 +1679,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "文件已移动或删除", "path": path}, 404)
         try:
             fsize = os.path.getsize(path)
-        except Exception as e:
-            return self._json({"error": str(e)}, 500)
+        except Exception:
+            return self._json({"error": "无法读取音频文件"}, 500)
         start, end = 0, fsize - 1
         rng = self.headers.get("Range")
         if rng:
@@ -1756,23 +1795,23 @@ class Server:
 
     allow_reuse_address is deliberately off: on Windows SO_REUSEADDR lets a second
     process bind the *same* port and silently split incoming connections.
+
+    ``port`` may be 0: the OS then hands out an ephemeral port atomically at bind
+    time. That is the native shell's handshake path -- asking a *different*
+    process to pick a free port and then bind it later leaves a window where
+    another process can steal the port in between.
     """
 
     def __init__(self, port: Optional[int] = None) -> None:
-        last_err: Optional[Exception] = None
-        for _ in range(20):
-            p = port or find_free_port()
-            try:
-                self.httpd = _Server(("127.0.0.1", p), Handler)
-                self.port = p
-                break
-            except OSError as e:
-                last_err = e
-                if port:
-                    raise
-                continue
-        else:  # pragma: no cover
-            raise OSError(f"无法绑定本地端口: {last_err}")
+        bind_port = 0 if port is None else int(port)
+        try:
+            self.httpd = _Server(("127.0.0.1", bind_port), Handler)
+        except OSError as e:
+            if port:
+                raise
+            raise OSError(f"无法绑定本地端口: {e}") from e
+        # server_address is the *real* port; it differs from bind_port when 0 was given.
+        self.port = int(self.httpd.server_address[1])
         self.thread: Optional[threading.Thread] = None
 
     @property

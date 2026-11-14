@@ -89,6 +89,11 @@ class TruePeakLimiter:
             x = x[:, None]
         if x.shape[1] != self.ch:
             raise ValueError("channels %d != %d" % (x.shape[1], self.ch))
+        # 损坏文件解出的一个 NaN/Inf 会走「需要压缩」分支，把 d 污染成 NaN，
+        # 随后 self.g 永久 NaN —— 整首歌从此静音/破音，直到换曲。入口先净化，
+        # 保证递推状态只见到有限值；Inf 按满幅 1.0 收，NaN 按静音 0.0。
+        if not np.all(np.isfinite(x)):
+            x = np.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
         T = self.n_in
         seg = np.concatenate([self.prev3, x], axis=0)
         tp_new = self._tp_new(seg)
@@ -120,6 +125,8 @@ class TruePeakLimiter:
         else:
             d = np.minimum(1.0, self.ceiling / np.maximum(peaks, 1e-12))
             g = self.g
+            if not np.isfinite(g):
+                g = 1.0        # 老状态若已被污染，别让一次坏块成为永久故障
             gg = np.empty(n, np.float64)
             att, rel = self.a_att, self.a_rel
             for i in range(n):
@@ -129,6 +136,8 @@ class TruePeakLimiter:
                     # g 从上方逼近 d，任何一步都不会大于 d ⇒ 不会越过 ceiling
                 else:
                     g += (t - g) * rel
+                if not np.isfinite(g):
+                    g = 1.0
                 gg[i] = g
             self.g = g
             self.min_g = min(self.min_g, float(gg.min()))

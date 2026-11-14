@@ -663,7 +663,7 @@ public sealed partial class MainWindow : Window
             }
 
             _api = new ApiClient();
-            _api.Attach(_backend.BaseUrl);
+            _api.Attach(_backend.BaseUrl, _backend.ApiToken);
             AppServices.Api = _api;
             Trace("backend " + _backend.BaseUrl);
 
@@ -680,6 +680,7 @@ public sealed partial class MainWindow : Window
             AppServices.Player = _player;
             _player.Changed += SyncPlayerUi;
             _player.ErrorOccurred += ShowToast;
+            _player.NoticeOccurred += ShowToast;
             _player.ApplySettings(_boot.Settings);
             ApplyLyricSettings(_boot.Settings);
 
@@ -696,7 +697,7 @@ public sealed partial class MainWindow : Window
                     WinRT.Interop.WindowNative.GetWindowHandle(this),
                     DispatcherQueue,
                     _player,
-                    id => _api!.TrackCover(id, "art"));
+                    _api);
                 Trace("smtc ready");
             }
             catch (Exception ex)

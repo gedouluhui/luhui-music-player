@@ -20,6 +20,8 @@ import unittest
 import base64
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -509,6 +511,177 @@ class TestA5SpawnFailure(unittest.TestCase):
         self.assertIsInstance(err, dict, st)
         self.assertEqual(err.get("kind"), "decoder_unavailable")
         self.assertFalse(eng._eof)
+
+
+class TestP0LimiterNaN(unittest.TestCase):
+    """P0: one NaN sample must not poison the limiter gain for the rest of the track."""
+
+    def test_nan_and_inf_are_sanitised_before_the_gain_loop(self) -> None:
+        from sp.limiter import TruePeakLimiter
+
+        lim = TruePeakLimiter(48000, 2)
+        bad = np.zeros((512, 2), dtype=np.float32)
+        bad[10, 0] = np.nan
+        bad[20, 1] = np.inf
+        bad[30, 0] = -np.inf
+        bad[40, :] = 4.0
+        out = lim.process(bad)
+        self.assertTrue(np.all(np.isfinite(out)), "limiter emitted non-finite samples")
+        self.assertTrue(np.isfinite(lim.g), "limiter gain became NaN/Inf")
+        self.assertLessEqual(float(np.max(np.abs(out))), 1.0)
+
+        t = np.arange(2048, dtype=np.float32) / 48000.0
+        good = (0.25 * np.sin(2 * np.pi * 440.0 * t)).astype(np.float32)
+        good = np.repeat(good[:, None], 2, axis=1)
+        out2 = lim.process(good)
+        self.assertTrue(np.all(np.isfinite(out2)))
+        self.assertTrue(np.isfinite(lim.g))
+        self.assertGreater(float(np.max(np.abs(out2[600:]))), 0.1,
+                           "later clean audio was silenced by the poisoned gain")
+
+    def test_reader_rejects_non_finite_pcm_before_the_device(self) -> None:
+        """The exclusive path bypasses the limiter, so reader-loop sanitising is required."""
+        import inspect
+
+        src = inspect.getsource(audioplay.NativeEngine._reader_loop)
+        self.assertIn("nan_to_num", src,
+                      "reader loop must sanitise float32 PCM before feeding the device")
+
+
+class TestP1ApiToken(_ServerCase):
+    """P1: the native shell's token must gate /api/*, while static pages stay readable."""
+
+    TOKEN = "0123456789abcdef0123456789abcdef0123456789abcdef"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        os.environ["SALTPLAYER_API_TOKEN"] = cls.TOKEN
+        cls.addClassCleanup(lambda: os.environ.pop("SALTPLAYER_API_TOKEN", None))
+        super().setUpClass()
+
+    def test_api_without_token_is_forbidden(self) -> None:
+        status, _, obj = _request(self.port, "GET", "/api/native/state")
+        self.assertEqual(status, 403, obj)
+        status, _, obj = _request(self.port, "POST", "/api/native", body={"action": "stop"})
+        self.assertEqual(status, 403, obj)
+
+    def test_wrong_token_is_forbidden(self) -> None:
+        status, _, _ = _request(self.port, "GET", "/api/bootstrap",
+                                headers={"X-Salt-Token": self.TOKEN[:-1] + "0"})
+        self.assertEqual(status, 403)
+
+    def test_correct_token_reaches_the_api(self) -> None:
+        status, _, obj = _request(self.port, "GET", "/api/bootstrap",
+                                  headers={"X-Salt-Token": self.TOKEN})
+        self.assertEqual(status, 200, obj)
+        self.assertTrue(obj and obj.get("ok"))
+
+    def test_cover_may_use_query_token_but_other_get_may_not(self) -> None:
+        # <img>/<audio> in the WinUI shell cannot attach headers; the shell appends
+        # the token to exactly these read-only URLs. Everything else stays header-only.
+        status, hs, _ = _request(self.port, "GET", "/api/cover?album=A&artist=B&size=thumb"
+                                 "&token=" + self.TOKEN)
+        self.assertEqual(status, 200)
+        self.assertTrue((hs.get("content-type") or "").startswith("image/"))
+        self.assertEqual(_request(self.port, "GET", "/api/bootstrap?token=" + self.TOKEN)[0], 403)
+
+    def test_static_page_needs_no_token(self) -> None:
+        status, _, _ = _request(self.port, "GET", "/")
+        self.assertEqual(status, 200)
+
+
+class TestP1WasapiDeviceIdentity(unittest.TestCase):
+    """Simultaneous identical USB DACs must not be mapped onto each other by name."""
+
+    def test_duplicate_friendly_names_are_left_unmapped(self) -> None:
+        old = audioplay._wasapi_endpoints
+        audioplay._wasapi_endpoints = lambda: [
+            {"name": "USB DAC", "id": "first"},
+            {"name": "USB DAC", "id": "second"},
+            {"name": "Speakers", "id": "spk"},
+        ]
+        try:
+            rows = [{"index": 1, "name": "USB DAC"},
+                    {"index": 2, "name": "USB DAC"},
+                    {"index": 3, "name": "Speakers"}]
+            audioplay.NativeEngine._attach_wasapi_ids(rows)
+        finally:
+            audioplay._wasapi_endpoints = old
+        self.assertIsNone(rows[0]["wasapi_id"])
+        self.assertIsNone(rows[1]["wasapi_id"])
+        self.assertEqual(rows[2]["wasapi_id"], "spk")
+
+
+class TestP1WasapiAlignment(unittest.TestCase):
+    """P1: AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED must trigger the documented retry."""
+
+    def test_open_retries_with_aligned_period_and_closes_failed_client(self) -> None:
+        from sp import wasapi
+
+        state = {"init_calls": 0, "clients": 0, "closed": 0, "init_packets": []}
+
+        class FakeClient:
+            def __init__(self, device_id: str):
+                state["clients"] += 1
+                self.p = 0x1000 + state["clients"]
+                self.device_id = device_id
+
+            def close(self) -> None:
+                state["closed"] += 1
+                self.p = 0
+
+        class FakeKernel:
+            @staticmethod
+            def CreateEventExW(*_a):
+                return 0xBEEF
+
+            @staticmethod
+            def CloseHandle(*_a):
+                return True
+
+        def fake_call(this, name, restype, argtypes, args):
+            if name == "ac.initialize":
+                packet = int(args[2])
+                state["init_packets"].append(packet)
+                state["init_calls"] += 1
+                if state["init_calls"] == 1:
+                    return wasapi.AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED
+                return wasapi.S_OK
+            if name == "ac.get_buffer_size":
+                args[0]._obj.value = 448
+                return wasapi.S_OK
+            if name == "ac.set_event_handle":
+                return wasapi.S_OK
+            if name == "ac.get_service":
+                args[1]._obj.value = 0xCAFE
+                return wasapi.S_OK
+            if name == "unk.release":
+                return 0
+            raise AssertionError("unexpected COM call: " + name)
+
+        old_call, old_client, old_libs, old_init = (
+            wasapi._call, wasapi.AudioClient, wasapi._libs, wasapi.com_init)
+        wasapi._call = fake_call
+        wasapi.AudioClient = FakeClient
+        wasapi._libs = lambda: (None, FakeKernel)
+        wasapi.com_init = lambda mta=True: "already"
+        try:
+            st = wasapi.ExclusiveStream(
+                "fake-device", wasapi.make_wf(44100, 2, 32), buffer_frames=448,
+                period_hns=100000)
+            rec = st.open()
+        finally:
+            wasapi._call, wasapi.AudioClient, wasapi._libs, wasapi.com_init = (
+                old_call, old_client, old_libs, old_init)
+
+        self.assertEqual(state["init_calls"], 2)
+        self.assertEqual(state["clients"], 2)
+        self.assertGreaterEqual(state["closed"], 1)
+        aligned = int(round(10_000_000.0 * 448 / 44100))
+        self.assertEqual(state["init_packets"][-1], aligned)
+        self.assertEqual(st.period_hns, aligned)
+        self.assertEqual(rec["period_frames"], 448)
+        self.assertEqual(rec["period_frames_calc"], 448)
 
 
 if __name__ == "__main__":
