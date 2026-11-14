@@ -18,8 +18,9 @@ jobs:
           cache: pip
       # PyAudioWPatch 是 guarded import，CI 没有声卡也不真播；imageio-ffmpeg 则必须装：
       # A4 解码失败测试要用它自带的 ffmpeg 二进制跑子进程，只解码到内存，不开设备。
+      # PyQt5 用于 A3/A4 前端逻辑测试：用 QJSEngine 跑 web/app.js 里的纯函数，不建窗口。
       - name: Install test dependencies
-        run: python -m pip install --upgrade pip pytest numpy scipy mutagen Pillow imageio-ffmpeg
+        run: python -m pip install --upgrade pip pytest numpy scipy mutagen Pillow imageio-ffmpeg PyQt5
       - name: Run offline regression suites
         run: python -m pytest tests -q
 
