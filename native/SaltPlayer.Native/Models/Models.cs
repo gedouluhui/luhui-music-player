@@ -126,6 +126,7 @@ public sealed class PlaylistInfo
 
 public sealed class BootstrapResponse
 {
+    [JsonPropertyName("protocol")] public ApiProtocol? Protocol { get; set; }
     [JsonPropertyName("ok")] public bool Ok { get; set; }
     [JsonPropertyName("app")] public AppInfo App { get; set; } = new();
     [JsonPropertyName("settings")] public SettingsDto Settings { get; set; } = new();
@@ -417,30 +418,6 @@ public sealed class ScanStartResponse
     [JsonPropertyName("started")] public bool Started { get; set; }
     [JsonPropertyName("busy")] public bool Busy { get; set; }
     [JsonPropertyName("error")] public string? Error { get; set; }
-}
-
-public sealed class NativeState
-{
-    [JsonPropertyName("ok")] public bool Ok { get; set; }
-    [JsonPropertyName("engine")] public string? Engine { get; set; }
-    [JsonPropertyName("path")] public string? Path { get; set; }
-    [JsonPropertyName("playing")] public bool Playing { get; set; }
-    [JsonPropertyName("position")] public double Position { get; set; }
-    [JsonPropertyName("duration")] public double Duration { get; set; }
-    [JsonPropertyName("rate")] public double Rate { get; set; }
-    [JsonPropertyName("channels")] public int Channels { get; set; }
-    [JsonPropertyName("out_rate")] public int OutRate { get; set; }
-    [JsonPropertyName("ended")] public bool Ended { get; set; }
-    [JsonPropertyName("mode")] public string? Mode { get; set; }
-    [JsonPropertyName("native_note")] public string? NativeNote { get; set; }
-    [JsonPropertyName("speed")] public double Speed { get; set; } = 1;
-    [JsonPropertyName("atempo")] public double Atempo { get; set; } = 1;
-    [JsonPropertyName("source_bits")] public int SourceBits { get; set; }
-    [JsonPropertyName("source_rate")] public int SourceRate { get; set; }
-    [JsonPropertyName("source_ch")] public int SourceCh { get; set; }
-    [JsonPropertyName("underruns")] public int Underruns { get; set; }
-    [JsonPropertyName("error")] public string? Error { get; set; }
-    [JsonPropertyName("ignored")] public string? Ignored { get; set; }
 }
 
 public sealed class FavoriteResponse

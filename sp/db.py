@@ -447,11 +447,31 @@ def mark_missing_not_in(paths: Iterable[str], library_id: Optional[int] = None) 
 
 
 def purge_missing() -> int:
-    rows = query("SELECT id FROM tracks WHERE missing = 1")
-    ids = [int(r["id"]) for r in rows]
-    delete_track_refs_many(ids)
-    write("DELETE FROM tracks WHERE missing = 1")
-    return len(ids)
+    """在同一写事务内冻结失效 ID、清引用并删曲目；返回 DELETE 的实际行数。"""
+    with _LOCK:
+        global _WRITE_GEN
+        c = conn()
+        removed = 0
+        try:
+            # 全局锁保护共享连接，IMMEDIATE 则阻止其他连接在选 ID 后恢复曲目。
+            c.execute("BEGIN IMMEDIATE")
+            ids = [int(r["id"]) for r in c.execute(
+                "SELECT id FROM tracks WHERE missing = 1").fetchall()]
+            for i in range(0, len(ids), _SQL_CHUNK):
+                chunk = ids[i:i + _SQL_CHUNK]
+                ph = ",".join("?" * len(chunk))
+                # 不调用 batch/write：它们会提前提交，拆开引用和曲目的删除。
+                for table in ("playlist_items", "favorites", "plays"):
+                    c.execute(f"DELETE FROM {table} WHERE track_id IN ({ph})", chunk)
+                removed += c.execute(
+                    f"DELETE FROM tracks WHERE id IN ({ph})", chunk).rowcount
+            c.commit()
+        except Exception:
+            c.rollback()
+            raise
+        _WRITE_GEN += 1
+        _COUNT_CACHE.clear()
+        return removed
 
 
 def get_track(track_id: int) -> Optional[Dict[str, Any]]:

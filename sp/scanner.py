@@ -279,8 +279,10 @@ def scan_async(library_id: Optional[int] = None, include_unsupported: bool = Fal
                force: bool = False) -> Dict[str, Any]:
     global _scan_thread
     with _STATE_LOCK:
-        if STATE["running"]:
-            return {"ok": False, "busy": True, **state_snapshot()}
+        running = STATE["running"]
+    if running:
+        # state_snapshot() 自己取普通 Lock，不能在持锁时调用。
+        return {"ok": False, "busy": True, **state_snapshot()}
     if not _SCAN_LOCK.acquire(blocking=False):
         # 上面那道 running 检查在空档里会放行第二个请求，这里才是真正拦住它的门。
         return {"ok": False, "busy": True, **state_snapshot()}
@@ -291,8 +293,14 @@ def scan_async(library_id: Optional[int] = None, include_unsupported: bool = Fal
         finally:
             _SCAN_LOCK.release()
 
-    _scan_thread = threading.Thread(target=run, daemon=True, name="salt-scan")
-    _scan_thread.start()
+    try:
+        _scan_thread = threading.Thread(target=run, daemon=True, name="salt-scan")
+        _scan_thread.start()
+    except Exception:
+        # 线程未能启动，就没有 run() 的 finally 替我们释放准入锁。
+        _scan_thread = None
+        _SCAN_LOCK.release()
+        raise
     return {"ok": True, "started": True}
 
 

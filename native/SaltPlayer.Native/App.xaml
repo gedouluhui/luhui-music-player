@@ -12,7 +12,7 @@
             <!-- ============================ surfaces ============================ -->
             <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F4F5F8" />
             <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A7AEBC" />
-            <SolidColorBrush x:Key="TextTertiaryBrush" Color="#717A8B" />
+            <SolidColorBrush x:Key="TextTertiaryBrush" Color="#8993A4" />
             <SolidColorBrush x:Key="TextDisabledBrush" Color="#4E5665" />
             <SolidColorBrush x:Key="AccentBrush" Color="#F2A66F" />
             <SolidColorBrush x:Key="AccentStrongBrush" Color="#FFB782" />
@@ -208,6 +208,7 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
                             <Grid x:Name="Root" Background="{TemplateBinding Background}"
+                                  Padding="{TemplateBinding Padding}"
                                   CornerRadius="{TemplateBinding CornerRadius}">
                                 <ContentPresenter x:Name="Presenter"
                                                   Content="{TemplateBinding Content}"
@@ -253,6 +254,7 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
                             <Grid x:Name="Root" Background="{TemplateBinding Background}"
+                                  Padding="{TemplateBinding Padding}"
                                   CornerRadius="{TemplateBinding CornerRadius}">
                                 <ContentPresenter x:Name="Presenter"
                                                   Content="{TemplateBinding Content}"
@@ -297,6 +299,7 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
                             <Grid x:Name="Root" Background="{TemplateBinding Background}"
+                                  Padding="{TemplateBinding Padding}"
                                   BorderBrush="{TemplateBinding BorderBrush}"
                                   BorderThickness="{TemplateBinding BorderThickness}"
                                   CornerRadius="{TemplateBinding CornerRadius}">
@@ -350,6 +353,7 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
                             <Grid x:Name="Root" Background="{TemplateBinding Background}"
+                                  Padding="{TemplateBinding Padding}"
                                   CornerRadius="{TemplateBinding CornerRadius}">
                                 <ContentPresenter x:Name="Presenter" Content="{TemplateBinding Content}"
                                                   Foreground="{TemplateBinding Foreground}"

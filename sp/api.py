@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import db, lyrics as lrc, metadata, playback, scanner
 from . import audioplay, downmix
+from .protocol import protocol_manifest
 from .textidx import pinyin_initial
 from .config import (APP_NAME, LYRIC_EXTS, data_root, normalize_path, port_path,
                      settings_path, web_root)
@@ -852,6 +853,7 @@ class Handler(BaseHTTPRequestHandler):
     def _bootstrap(self) -> Dict[str, Any]:
         s = load_settings()
         return {
+            "protocol": protocol_manifest(),
             "app": {"name": APP_NAME, "version": _version(),
                     "native": bool(WINDOW_HOOKS), "pick_folder": callable(UI_HOOKS.get("pick_folder"))},
             "settings": s,

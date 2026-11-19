@@ -669,6 +669,11 @@ public sealed partial class MainWindow : Window
 
             SetBootStatus("正在读取曲库…");
             _boot = await _api.GetAsync<BootstrapResponse>("bootstrap");
+            if (_boot.Protocol?.GetCompatibilityError() is { } protocolError)
+            {
+                ShowBootError(protocolError);
+                return;  // No library reads, queue restoration, or playback on incompatible backends.
+            }
             Trace($"bootstrap tracks={_boot.Stats.Tracks} albums={_boot.Stats.Albums} playlists={_boot.Playlists.Count}");
             AppServices.Bootstrap = _boot;
 
@@ -2991,13 +2996,19 @@ public sealed partial class MainWindow : Window
 
     private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (!_ready || _player is null) return;
+        if (!_ready || _player is null || e.Handled) return;
         var focused = FocusManager.GetFocusedElement(Content.XamlRoot);
-        if (focused is TextBox or PasswordBox or RichEditBox or AutoSuggestBox) return;
-        var ctrl = Microsoft.UI.Input.InputKeyboardSource
-            .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
-            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-        if (ctrl) return;
+        bool editing = false, controlFocused = false;
+        for (var node = focused as DependencyObject; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            editing |= node is TextBox or PasswordBox or RichEditBox or AutoSuggestBox;
+            controlFocused |= node is ButtonBase or Selector or Slider or ToggleSwitch or ScrollViewer or MenuFlyoutItemBase;
+        }
+        var modified = new[] { Windows.System.VirtualKey.Control, Windows.System.VirtualKey.Menu,
+            Windows.System.VirtualKey.LeftWindows, Windows.System.VirtualKey.RightWindows }
+            .Any(key => Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key)
+                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down));
+        if (!PlayerPresentation.AllowsGlobalShortcut(e.Key.ToString(), editing, controlFocused, modified)) return;
 
         switch (e.Key)
         {
@@ -3055,10 +3066,6 @@ public sealed partial class MainWindow : Window
                     _ = ShowTrackInfoAsync(current);
                 }
                 break;
-            case Windows.System.VirtualKey.Delete:
-                e.Handled = true;
-                _ = _player.ClearQueueAsync(keepCurrent: true);
-                break;
             case Windows.System.VirtualKey.F1:
                 e.Handled = true;
                 _ = ShowShortcutsAsync();
@@ -3113,7 +3120,7 @@ public sealed partial class MainWindow : Window
             ("搜索", "/"),
             ("歌词 / 队列 / 曲目详情", "L / Q / I"),
             ("播放模式（列表/单曲/随机/顺序）", "M"),
-            ("清空播放队列（保留当前曲目）", "Delete"),
+            ("清空队列请使用队列面板的清空按钮", "Q 打开队列"),
             ("快捷键总览", "? 或 F1"),
             ("关闭歌词 / 浮层", "Esc"),
         };
@@ -3219,14 +3226,22 @@ public sealed partial class MainWindow : Window
     private async void HeroPlay_Click(object sender, RoutedEventArgs e)
     {
         if (_player is null) return;
-        if (_player.Current is not null)
+        var track = ResolveHeroTrack();
+        var action = PlayerPresentation.HomeAction(_player.Current?.Id, track?.Id, _player.IsPlaying);
+        if (action.Action == "add-library")
+        {
+            AddLibrary_Click(sender, e);
+            return;
+        }
+        if (action.Action == "toggle-current")
         {
             await _player.ToggleAsync();
             return;
         }
-        var list = _view.Count > 0 ? _view : _allTracks;
-        if (list.Count == 0) return;
-        await _player.PlayFromAsync(list, 0, "所有歌曲");
+        var list = _recent.Any(t => t.Id == action.TrackId) ? _recent : _allTracks;
+        var index = list.FindIndex(t => t.Id == action.TrackId);
+        if (index < 0 || track is null) { SyncHero(); return; }
+        await _player.PlayFromAsync(list, index, ReferenceEquals(list, _recent) ? "最近播放" : "所有歌曲");
     }
 
     // --------------------------------------------------------------- playback
@@ -4602,8 +4617,8 @@ public sealed partial class MainWindow : Window
         var playing = player?.IsPlaying == true;
         _mini?.SetPlaying(playing);
         PlayGlyph.Glyph = playing ? "\uE769" : "\uE768";
-        HeroPlayGlyph.Glyph = playing ? "\uE769" : "\uE768";
-        HeroPlayText.Text = playing ? "暂停" : "播放";
+        UpdateHeroAction();
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PlayButton, playing ? "暂停播放" : "继续播放");
 
         var pos = player?.Position ?? 0;
         var dur = player?.Duration ?? 0;
@@ -4652,9 +4667,22 @@ public sealed partial class MainWindow : Window
         NowFavoriteGlyph.Foreground = favorite ? _accentBrush : _dimBrush;
     }
 
+    private Track? ResolveHeroTrack() => _player?.Current ?? _recent.FirstOrDefault() ?? _allTracks.FirstOrDefault();
+
+    private void UpdateHeroAction()
+    {
+        var action = PlayerPresentation.HomeAction(_player?.Current?.Id, ResolveHeroTrack()?.Id, _player?.IsPlaying == true);
+        HeroPlayText.Text = action.Label;
+        HeroPlayGlyph.Glyph = action.Action == "add-library" ? "\uE710"
+            : _player?.IsPlaying == true ? "\uE769" : "\uE768";
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(HeroPlay, action.Label);
+        HeroPlay.IsEnabled = _ready && _player?.IsBusy != true;
+    }
+
     private void SyncHero()
     {
-        var track = _player?.Current ?? _recent.FirstOrDefault() ?? _allTracks.FirstOrDefault();
+        var track = ResolveHeroTrack();
+        UpdateHeroAction();
         if (track is null)
         {
             HeroTitle.Text = "曲库是空的";
@@ -4739,12 +4767,7 @@ public sealed partial class MainWindow : Window
             : $"{ts.Minutes}:{ts.Seconds:00}";
     }
 
-    private static string FormatLong(double seconds)
-    {
-        var ts = TimeSpan.FromSeconds(Math.Max(0, seconds));
-        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours} 小时 {ts.Minutes} 分";
-        return $"{Math.Max(1, ts.Minutes)} 分钟";
-    }
+    private static string FormatLong(double seconds) => PlayerPresentation.FormatDuration(seconds);
 
     private Action? _toastAction;
 

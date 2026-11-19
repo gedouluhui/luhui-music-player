@@ -14,7 +14,7 @@ internal static class ThemePalette
     {
         ["TextPrimaryBrush"] = "#F4F5F8",
         ["TextSecondaryBrush"] = "#A7AEBC",
-        ["TextTertiaryBrush"] = "#717A8B",
+        ["TextTertiaryBrush"] = "#8993A4",
         ["TextDisabledBrush"] = "#4E5665",
         ["AccentBrush"] = "#F2A66F",
         ["AccentStrongBrush"] = "#FFB782",
@@ -65,10 +65,10 @@ internal static class ThemePalette
     {
         ["TextPrimaryBrush"] = "#191C22",
         ["TextSecondaryBrush"] = "#565D6B",
-        ["TextTertiaryBrush"] = "#7E8695",
+        ["TextTertiaryBrush"] = "#5E6878",
         ["TextDisabledBrush"] = "#AEB5C1",
-        ["AccentBrush"] = "#D97840",
-        ["AccentStrongBrush"] = "#B95F2E",
+        ["AccentBrush"] = "#A95029",
+        ["AccentStrongBrush"] = "#994420",
         ["AccentOnBrush"] = "#FFF8F2",
         ["AccentSoftBrush"] = "#28D97840",
         ["DangerBrush"] = "#C63C3C",

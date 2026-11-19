@@ -173,7 +173,7 @@ public sealed class PlayerService
         // 当成「当前曲播完」再自动 next 一次（用的是已经切好的新 Index）⇒ 点一首却跳到
         // 别首、点下一首连跳几首。代际号让飞行中的轮询作废；_endHandled 先 disarm 自动
         // 切歌，等新曲真正起播成功（下方）再 arm。
-        _playGen++;
+        var gen = ++_playGen;
         _endHandled = true;
         IsBusy = true;
         LastError = null;
@@ -187,19 +187,11 @@ public sealed class PlayerService
                 track_id = track.Id,
                 pos = position,
             }).ConfigureAwait(true);
+            if (_shutdown || gen != _playGen || Current?.Id != track.Id) return;
             Trace($"play-resp ok={st.Ok} playing={st.Playing} ended={st.Ended} pos={st.Position:F2} dur={st.Duration:F2} mode={st.Mode} err={st.Error ?? "-"} note={st.NativeNote ?? "-"}");
+            if (HandleNativeError(st)) return;
             RaiseNotice(st.NativeNote);
-            if (st.Ok == false)
-            {
-                LastError = st.Error ?? st.NativeNote ?? "无法开始播放";
-                Trace($"play-FAIL {LastError}");
-                IsPlaying = false;
-                IsBusy = false;
-                Raise();
-                ErrorOccurred?.Invoke(LastError);
-                return;
-            }
-            IsPlaying = true;
+            IsPlaying = NativePlaybackDecision.From(st).IsPlaying;
             IsBusy = false;
             _endHandled = false;
             Position = st.Position > 0 ? st.Position : position;
@@ -214,7 +206,9 @@ public sealed class PlayerService
         }
         catch (Exception e)
         {
+            if (_shutdown || gen != _playGen || Current?.Id != track.Id) return;
             Trace($"play-EX {e.GetType().Name}: {e.Message}");
+            SetCurrentFlag(false);
             IsBusy = false;
             IsPlaying = false;
             LastError = e.Message;
@@ -242,9 +236,9 @@ public sealed class PlayerService
             }
             else
             {
-                if (Position >= Duration - 0.15 && Duration > 0)
+                if (LastError is not null || (Position >= Duration - 0.15 && Duration > 0))
                 {
-                    Trace("toggle-restart-at-end");
+                    Trace(LastError is null ? "toggle-restart-at-end" : "toggle-retry-after-error");
                     await PlayCurrentAsync(0).ConfigureAwait(true);
                     return;
                 }
@@ -424,6 +418,9 @@ public sealed class PlayerService
         }
 
         var wasPlaying = IsPlaying;
+        ++_playGen;  // The removed track owns no pending response, even when it was still loading.
+        IsBusy = false;
+        _endHandled = true;
         SetCurrentFlag(false);
         Queue.RemoveAt(index);
         if (Queue.Count == 0)
@@ -508,6 +505,23 @@ public sealed class PlayerService
         Raise();
     }
 
+    private bool HandleNativeError(NativeState state)
+    {
+        var decision = NativePlaybackDecision.From(state);
+        if (decision.Error is null) return false;
+        var notify = !string.Equals(LastError, decision.Error, StringComparison.Ordinal);
+        LastError = decision.Error;
+        IsPlaying = false;
+        IsBusy = false;
+        _endHandled = true;
+        SetCurrentFlag(false);
+        _poll.Stop();
+        _saveTick.Stop();
+        Raise();
+        if (notify) ErrorOccurred?.Invoke(decision.Error);
+        return true;
+    }
+
     private async Task PollAsync()
     {
         if (_polling || Current is null || IsBusy) return;
@@ -521,19 +535,16 @@ public sealed class PlayerService
             // GET 飞行期间用户点了歌/切了歌：这份 state 还停在上一首，照收会镜像错曲目，
             // 还会拿旧曲的 Ended 触发自动 next（用的是已切好的新 Index）⇒ 跳到别首。
             // 代际变了或正在起播，就把这份陈旧快照作废。
-            if (gen != _playGen || IsBusy) return;
-            if (st.Ok == false)
-            {
-                Trace($"poll-notok err={st.Error}");
-                return;
-            }
+            if (_shutdown || gen != _playGen || IsBusy) return;
+            if (HandleNativeError(st)) return;
+            var decision = NativePlaybackDecision.From(st);
             Trace($"poll playing={st.Playing} ended={st.Ended} pos={st.Position:F2}/{st.Duration:F2} underruns={st.Underruns} mode={st.Mode} note={st.NativeNote ?? "-"}");
             RaiseNotice(st.NativeNote);
             var wasPlaying = IsPlaying;
-            IsPlaying = st.Playing && !st.Ended;
+            IsPlaying = decision.IsPlaying;
             Position = Math.Max(0, st.Position);
             if (st.Duration > 0) Duration = st.Duration;
-            if (!IsPlaying && wasPlaying && st.Ended && !_endHandled && !IsBusy)
+            if (!IsPlaying && wasPlaying && decision.NaturalEnd && !_endHandled && !IsBusy)
             {
                 Trace("ended-edge auto-next");
                 _endHandled = true;
