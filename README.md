@@ -5,6 +5,7 @@
 **Windows 本地音乐播放器：WinUI 3 原生外壳 + 本地 Python 音频服务 + WASAPI 输出。**
 
 <p>
+<img alt="ci" src="https://github.com/gedouluhui/luhui-music-player/actions/workflows/ci.yml/badge.svg">
 <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%201809%2B%20%2F%2011%20x64-lightgrey">
 <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0-blue">
 <img alt="output" src="https://img.shields.io/badge/output-WASAPI%20shared%20%2F%20exclusive-informational">
